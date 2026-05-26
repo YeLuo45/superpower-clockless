@@ -1,0 +1,6 @@
+---
+description: Superpower proposal-management workflow
+alwaysApply: true
+---
+
+Use ai-superpower API for project/proposal data. Follow prj-proposals-manager lifecycle. Do not directly edit CSV data.

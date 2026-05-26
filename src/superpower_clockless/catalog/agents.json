@@ -1,0 +1,38 @@
+{
+  "hermes": {
+    "displayName": "Hermes Agent",
+    "kind": "yaml+mcp+skill",
+    "configPath": "~/.hermes/config.yaml",
+    "skillPath": "~/.hermes/skills/prj-proposals-manager",
+    "mcpServerKey": "superpower",
+    "notes": "Installs the prj-proposals-manager skill and appends an MCP server block for ai-superpower."
+  },
+  "openclaw": {
+    "displayName": "OpenClaw",
+    "kind": "json+mcp+extension",
+    "configPath": "~/.openclaw/openclaw.json",
+    "skillPath": "~/.openclaw/extensions/superpower-clockless/prj-proposals-manager",
+    "mcpServerKey": "superpower"
+  },
+  "cursor": {
+    "displayName": "Cursor",
+    "kind": "json+mcp+rules",
+    "configPath": "~/.cursor/mcp.json",
+    "skillPath": "~/.cursor/rules/prj-proposals-manager.mdc",
+    "mcpServerKey": "superpower"
+  },
+  "claude-code": {
+    "displayName": "Claude Code",
+    "kind": "mcp+claude-md",
+    "configPath": "~/.claude.json",
+    "skillPath": "~/.claude/skills/prj-proposals-manager",
+    "mcpServerKey": "superpower"
+  },
+  "codex": {
+    "displayName": "Codex CLI",
+    "kind": "toml+mcp+instructions",
+    "configPath": "~/.codex/config.toml",
+    "skillPath": "~/.codex/skills/prj-proposals-manager",
+    "mcpServerKey": "superpower"
+  }
+}

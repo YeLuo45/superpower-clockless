@@ -1,0 +1,19 @@
+[project]
+name = "superpower-clockless"
+version = "0.1.0"
+description = "Cross-agent installer for ai-superpower and proposal-management skills"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "YeLuo45"}]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+superpower-clockless = "superpower_clockless.cli:main"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
