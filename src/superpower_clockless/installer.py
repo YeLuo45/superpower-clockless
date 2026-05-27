@@ -195,6 +195,12 @@ def build_parser() -> argparse.ArgumentParser:
     install.add_argument("--start-server", action="store_true")
     install.add_argument("--dry-run", action="store_true")
 
+    doctor = sub.add_parser("doctor", help="validate local install and ai-superpower connectivity")
+    doctor.add_argument("--agent", choices=("all",) + SUPPORTED_AGENTS, default="all")
+    doctor.add_argument("--api-url", default=os.environ.get("AI_SUPERPOWER_URL", DEFAULT_API_URL))
+    doctor.add_argument("--timeout", type=float, default=2.0)
+    doctor.add_argument("--json", action="store_true", dest="json_output")
+
     sub.add_parser("agents", help="list supported agents")
     sub.add_parser("mcp", help="run MCP stdio bridge")
     sub.add_parser("mcp-info", help="print MCP bridge metadata")
@@ -216,6 +222,12 @@ def run(argv: list[str] | None = None) -> int:
 
         print(json.dumps({"name": "superpower", "api_url": os.environ.get("AI_SUPERPOWER_URL", DEFAULT_API_URL), "tools": tool_names()}, indent=2))
         return 0
+    if args.command == "doctor":
+        from .doctor import format_json_report, format_text_report, run_doctor
+
+        reports = run_doctor(args.agent, api_url=args.api_url, timeout=args.timeout)
+        print(format_json_report(reports) if args.json_output else format_text_report(reports))
+        return 0 if all(report.ok for report in reports) else 1
     plan = install_agent(args.agent, api_url=args.api_url, start_server=args.start_server, dry_run=args.dry_run)
     print(f"superpower-clockless install plan: {plan.agent}")
     for action in plan.actions:

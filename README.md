@@ -85,6 +85,18 @@ tests/
 
 Use `superpower-clockless mcp-info` to inspect tool names without starting the stdio loop.
 
+## Doctor
+
+Run the post-install doctor to verify local host wiring and ai-superpower connectivity without mutating files or data:
+
+```bash
+superpower-clockless doctor --agent hermes
+superpower-clockless doctor --agent all
+superpower-clockless doctor --json
+```
+
+The doctor checks catalog metadata, host config file presence, MCP server entries, skill/rule files, and `GET /health` on the configured ai-superpower API URL.
+
 ## Safety Rules
 
 - All project/proposal data writes must go through ai-superpower API/CLI.

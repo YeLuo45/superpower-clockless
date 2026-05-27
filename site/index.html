@@ -14,6 +14,8 @@
     code { background: #1e241c; color: #fff7e3; padding: 3px 7px; border-radius: 4px; }
     .agents { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
     .agents span { border: 1px solid var(--line); padding: 8px 12px; background: #fff7e3; }
+    .commands { display: grid; gap: 10px; margin: 28px 0; }
+    .commands code { display: block; width: fit-content; }
     a { color: var(--accent); font-weight: 700; }
   </style>
 </head>
@@ -22,7 +24,12 @@
     <section class="card">
       <h1>superpower<br>clockless</h1>
       <p>将 ai-superpower API Engine 与 prj-proposals-manager 生命周期技能安装到 Hermes、OpenClaw、Cursor、Claude Code、Codex 等 Agent。</p>
-      <p><code>superpower-clockless install hermes</code></p>
+      <div class="commands">
+        <code>superpower-clockless install hermes</code>
+        <code>superpower-clockless doctor --agent all</code>
+        <code>superpower-clockless doctor --json</code>
+      </div>
+      <p>V3 新增 post-install doctor：一次检查本地配置、MCP server、技能文件和 ai-superpower API 健康状态，支持文本与 JSON 输出。</p>
       <div class="agents"><span>Hermes</span><span>OpenClaw</span><span>Cursor</span><span>Claude Code</span><span>Codex</span></div>
       <p><a href="https://github.com/YeLuo45/superpower-clockless">GitHub Repo</a></p>
     </section>
