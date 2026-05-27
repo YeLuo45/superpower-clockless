@@ -151,6 +151,7 @@ On Windows systems:
 | File | Language |
 | --- | --- |
 | `README.md` | English |
+| `README-zh.md` | Chinese (中文) |
 | `README-de.md` | German (Deutsch) |
 | `README-fr.md` | French (Français) |
 | `README-ja.md` | Japanese (日本語) |

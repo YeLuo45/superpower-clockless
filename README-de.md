@@ -143,6 +143,16 @@ Auf Windows-Systemen:
 - `set "AI_SUPERPOWER_API_KEY=<your-key>"` ist das Äquivalent zu `export`
 - Pfade wie `~/.hermes/config.yaml` werden nach `%USERPROFILE%\.hermes\config.yaml` aufgelöst
 
+## Mehrsprachige Dokumentation
+
+| Datei | Sprache |
+| --- | --- |
+| `README.md` | English |
+| `README-zh.md` | Chinese (中文) |
+| `README-de.md` | Deutsch |
+| `README-fr.md` | Français |
+| `README-ja.md` | 日本語 |
+
 ## Entwicklung
 
 ```bash

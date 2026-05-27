@@ -143,6 +143,16 @@ Windowsシステムでは：
 - `set "AI_SUPERPOWER_API_KEY=<your-key>"`は`export`の同等物です
 - `~/.hermes/config.yaml`のようなパスは`%USERPROFILE%\.hermes\config.yaml`に解決されます
 
+## 多言語ドキュメント
+
+| ファイル | 言語 |
+| --- | --- |
+| `README.md` | English |
+| `README-zh.md` | Chinese (中文) |
+| `README-de.md` | Deutsch |
+| `README-fr.md` | Français |
+| `README-ja.md` | 日本語 |
+
 ## 開発
 
 ```bash
