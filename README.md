@@ -60,13 +60,15 @@ projects.csv / proposals.csv / audit.log
 
 ```text
 src/superpower_clockless/
-  api_client.py                   # ai-superpower REST client
-  mcp_server.py                   # minimal MCP stdio bridge
-  installer.py                    # CLI installer and config merge logic
-  catalog/agents.json             # supported agent matrix
-  templates/skills/               # bundled prj-proposals-manager skill
-  templates/ai-superpower/        # ai-superpower package metadata snapshot
-  templates/agents/               # host instruction blocks
+  api_client.py                # ai-superpower REST client
+  doctor.py                    # post-install validation checks
+  explain.py                   # non-mutating install preview plans
+  mcp_server.py                # minimal MCP stdio bridge
+  installer.py                 # CLI installer and config merge logic
+  catalog/agents.json          # supported agent matrix
+  templates/skills/            # bundled prj-proposals-manager skill
+  templates/ai-superpower/     # ai-superpower package metadata snapshot
+  templates/agents/            # host instruction blocks
 
 tests/
   test_api_client.py              # REST client behavior tests
@@ -96,6 +98,18 @@ superpower-clockless doctor --json
 ```
 
 The doctor checks catalog metadata, host config file presence, MCP server entries, skill/rule files, and `GET /health` on the configured ai-superpower API URL.
+
+## Explain
+
+Preview installer changes before writing any files:
+
+```bash
+superpower-clockless explain hermes
+superpower-clockless explain all --json
+superpower-clockless explain codex --start-server
+```
+
+The explain command reuses the install planner in dry-run mode and reports expanded config paths, skill paths, MCP server keys, API URL, and planned actions.
 
 ## Safety Rules
 
