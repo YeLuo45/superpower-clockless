@@ -31,6 +31,14 @@ superpower-clockless install hermes --dry-run
 superpower-clockless install hermes --api-url http://127.0.0.1:8000 --start-server
 ```
 
+During install, `superpower-clockless` reads `AI_SUPERPOWER_API_KEY` or `--api-key` and writes `~/.superpower-clockless/env` with:
+
+```bash
+export AI_SUPERPOWER_API_KEY="<your-key>"
+```
+
+Source this file from shell startup scripts when you want the key available in new terminal sessions.
+
 By default, install first bootstraps a local ai-superpower scaffold at `~/.superpower-clockless/ai-superpower`, then wires the selected agent to it. Use `--skip-core` only when ai-superpower is already installed elsewhere.
 
 Install other hosts by changing the agent name:

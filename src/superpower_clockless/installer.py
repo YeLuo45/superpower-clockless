@@ -83,6 +83,22 @@ def append_unique(path: Path, marker: str, block: str, *, dry_run: bool) -> str:
     return f"append block to {path}"
 
 
+def shell_double_quote(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
+    return f'"{escaped}"'
+
+
+def write_api_key_export(api_key: str, *, dry_run: bool) -> str | None:
+    if not api_key:
+        return None
+    env_path = expand("~/.superpower-clockless/env")
+    content = f"export AI_SUPERPOWER_API_KEY={shell_double_quote(api_key)}\n"
+    if dry_run:
+        return f"would write AI_SUPERPOWER_API_KEY export to {env_path}"
+    atomic_write(env_path, content)
+    return f"wrote AI_SUPERPOWER_API_KEY export to {env_path}"
+
+
 def mcp_json_block(api_url: str) -> dict[str, Any]:
     return {
         "command": "superpower-clockless",
@@ -165,6 +181,7 @@ def install_agent(
     install_core: bool = True,
     install_root: str | None = None,
     force_core: bool = False,
+    api_key: str | None = None,
 ) -> InstallPlan:
     catalog = load_catalog()
     if agent not in catalog:
@@ -209,6 +226,10 @@ def install_agent(
         actions.append(configure_opencode_style_json(config_path, meta["mcpServerKey"], api_url, dry_run=dry_run))
         actions.append(append_unique(expand("~/.openclaw/SUPERPOWER.md"), "# Superpower Clockless", SUPERPOWER_NOTE.read_text(), dry_run=dry_run))
 
+    export_action = write_api_key_export(api_key or os.environ.get("AI_SUPERPOWER_API_KEY", ""), dry_run=dry_run)
+    if export_action:
+        actions.append(export_action)
+
     if start_server:
         actions.append(maybe_start_server(dry_run=dry_run, core_path=resolved_install_root if install_core else None))
 
@@ -231,6 +252,7 @@ def build_parser() -> argparse.ArgumentParser:
     install = sub.add_parser("install", help="install integration for an agent")
     install.add_argument("agent", choices=SUPPORTED_AGENTS)
     install.add_argument("--api-url", default=os.environ.get("AI_SUPERPOWER_URL", DEFAULT_API_URL))
+    install.add_argument("--api-key", default=os.environ.get("AI_SUPERPOWER_API_KEY", ""), help="write shell export for AI_SUPERPOWER_API_KEY")
     install.add_argument("--start-server", action="store_true")
     install.add_argument("--dry-run", action="store_true")
     install.add_argument("--skip-core", action="store_true", help="only wire the agent; do not bootstrap ai-superpower core")
@@ -300,6 +322,7 @@ def run(argv: list[str] | None = None) -> int:
         install_core=not args.skip_core,
         install_root=args.install_root,
         force_core=args.force_core,
+        api_key=args.api_key,
     )
     print(f"superpower-clockless install plan: {plan.agent}")
     for action in plan.actions:

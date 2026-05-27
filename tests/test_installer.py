@@ -75,6 +75,37 @@ def test_claude_install_merges_json_and_instruction(tmp_path: Path, monkeypatch:
     assert "Superpower Clockless" in (tmp_path / ".claude" / "CLAUDE.md").read_text(encoding="utf-8")
 
 
+def test_install_writes_shell_env_export_from_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("AI_SUPERPOWER_API_KEY", "sk-test-key")
+
+    plan = install_agent("codex", dry_run=False)
+
+    env_file = tmp_path / ".superpower-clockless" / "env"
+    assert env_file.read_text(encoding="utf-8") == 'export AI_SUPERPOWER_API_KEY="sk-test-key"\n'
+    assert any("AI_SUPERPOWER_API_KEY export" in action for action in plan.actions)
+
+
+def test_install_uses_explicit_api_key_for_shell_env_export(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("AI_SUPERPOWER_API_KEY", "env-key")
+
+    install_agent("hermes", api_key="cli-key", dry_run=False)
+
+    env_file = tmp_path / ".superpower-clockless" / "env"
+    assert env_file.read_text(encoding="utf-8") == 'export AI_SUPERPOWER_API_KEY="cli-key"\n'
+
+
+def test_install_dry_run_does_not_write_shell_env_export(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("AI_SUPERPOWER_API_KEY", "sk-test-key")
+
+    plan = install_agent("cursor", dry_run=True)
+
+    assert any("would write AI_SUPERPOWER_API_KEY export" in action for action in plan.actions)
+    assert not (tmp_path / ".superpower-clockless" / "env").exists()
+
+
 def test_mcp_info_cli_lists_real_tools(capsys: pytest.CaptureFixture[str]) -> None:
     assert run(["mcp-info"]) == 0
 
