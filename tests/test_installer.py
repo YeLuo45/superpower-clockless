@@ -112,3 +112,36 @@ def test_mcp_info_cli_lists_real_tools(capsys: pytest.CaptureFixture[str]) -> No
     payload = json.loads(capsys.readouterr().out)
     assert payload["name"] == "superpower"
     assert "proposal_create" in payload["tools"]
+
+
+def test_write_api_key_export_detects_windows_and_writes_bat(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("SYSTEMROOT", "C:\\Windows")  # presence indicates Windows
+    from superpower_clockless.installer import write_api_key_export
+    action = write_api_key_export("sk-win-key", dry_run=False)
+    env_file = tmp_path / ".superpower-clockless" / "env.bat"
+    assert env_file.exists()
+    content = env_file.read_text(encoding="utf-8")
+    assert 'set "AI_SUPERPOWER_API_KEY=sk-win-key"' in content
+    assert "@echo off" in content
+
+
+def test_write_api_key_export_dry_run_on_windows_reports_bat_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("SYSTEMROOT", "C:\\Windows")
+    from superpower_clockless.installer import write_api_key_export
+    action = write_api_key_export("sk-win-key", dry_run=True)
+    assert ".bat" in action
+    assert not (tmp_path / ".superpower-clockless" / "env.bat").exists()
+
+
+def test_write_api_key_export_nix_writes_bash_format(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    # Ensure no Windows env vars
+    monkeypatch.delenv("SYSTEMROOT", raising=False)
+    from superpower_clockless.installer import write_api_key_export
+    action = write_api_key_export("sk-nix-key", dry_run=False)
+    env_file = tmp_path / ".superpower-clockless" / "env"
+    assert env_file.exists()
+    content = env_file.read_text(encoding="utf-8")
+    assert content == 'export AI_SUPERPOWER_API_KEY="sk-nix-key"\n'

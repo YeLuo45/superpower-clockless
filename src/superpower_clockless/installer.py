@@ -83,6 +83,10 @@ def append_unique(path: Path, marker: str, block: str, *, dry_run: bool) -> str:
     return f"append block to {path}"
 
 
+def is_windows() -> bool:
+    return os.name == "nt" or os.environ.get("SYSTEMROOT") or sys.platform == "win32"
+
+
 def shell_double_quote(value: str) -> str:
     escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("`", "\\`")
     return f'"{escaped}"'
@@ -91,8 +95,13 @@ def shell_double_quote(value: str) -> str:
 def write_api_key_export(api_key: str, *, dry_run: bool) -> str | None:
     if not api_key:
         return None
-    env_path = expand("~/.superpower-clockless/env")
-    content = f"export AI_SUPERPOWER_API_KEY={shell_double_quote(api_key)}\n"
+    base = expand("~/.superpower-clockless")
+    if is_windows():
+        env_path = base / "env.bat"
+        content = f'@echo off\nset "AI_SUPERPOWER_API_KEY={api_key}"\n'
+    else:
+        env_path = base / "env"
+        content = f"export AI_SUPERPOWER_API_KEY={shell_double_quote(api_key)}\n"
     if dry_run:
         return f"would write AI_SUPERPOWER_API_KEY export to {env_path}"
     atomic_write(env_path, content)

@@ -31,10 +31,17 @@ superpower-clockless install hermes --dry-run
 superpower-clockless install hermes --api-url http://127.0.0.1:8000 --start-server
 ```
 
-During install, `superpower-clockless` reads `AI_SUPERPOWER_API_KEY` or `--api-key` and writes `~/.superpower-clockless/env` with:
+During install, `superpower-clockless` reads `AI_SUPERPOWER_API_KEY` or `--api-key` and writes an env file with the export. Unix/macOS uses `~/.superpower-clockless/env` and Windows uses `~/.superpower-clockless/env.bat`.
 
 ```bash
+# Unix / macOS
 export AI_SUPERPOWER_API_KEY="<your-key>"
+```
+
+```bat
+:: Windows
+@echo off
+set "AI_SUPERPOWER_API_KEY=<your-key>"
 ```
 
 Source this file from shell startup scripts when you want the key available in new terminal sessions.
@@ -130,6 +137,23 @@ The explain command reuses the install planner in dry-run mode and reports expan
 - Existing agent config files are merged, not replaced.
 - Default install bootstraps ai-superpower core before agent wiring; use `--skip-core` for adapter-only mode.
 - `--dry-run` shows planned filesystem changes without writing.
+
+## Windows Support
+
+On Windows systems:
+- `~/.superpower-clockless/env.bat` is written for API key exports
+- `set "AI_SUPERPOWER_API_KEY=<your-key>"` is the equivalent of `export`
+- Paths like `~/.hermes/config.yaml` resolve to `%USERPROFILE%\.hermes\config.yaml`
+- PowerShell users: run `.\.superpower-clockless\env.bat` or add it to `$PROFILE`
+
+## Multi-Language Documentation
+
+| File | Language |
+| --- | --- |
+| `README.md` | English |
+| `README-de.md` | German (Deutsch) |
+| `README-fr.md` | French (Français) |
+| `README-ja.md` | Japanese (日本語) |
 
 ## Development
 
