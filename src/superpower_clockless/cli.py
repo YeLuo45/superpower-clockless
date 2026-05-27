@@ -8,7 +8,9 @@ from .installer import InstallError, run
 def main() -> int:
     try:
         return run()
-    except InstallError as exc:
+    except (InstallError, SystemExit) as exc:
+        if isinstance(exc, SystemExit):
+            return int(exc.code or 0)
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

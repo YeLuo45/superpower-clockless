@@ -196,7 +196,8 @@ def build_parser() -> argparse.ArgumentParser:
     install.add_argument("--dry-run", action="store_true")
 
     sub.add_parser("agents", help="list supported agents")
-    sub.add_parser("mcp", help="print MCP bridge placeholder metadata")
+    sub.add_parser("mcp", help="run MCP stdio bridge")
+    sub.add_parser("mcp-info", help="print MCP bridge metadata")
     return parser
 
 
@@ -207,7 +208,13 @@ def run(argv: list[str] | None = None) -> int:
             print(f"{key}\t{meta['displayName']}\t{meta['kind']}")
         return 0
     if args.command == "mcp":
-        print(json.dumps({"name": "superpower", "api_url": os.environ.get("AI_SUPERPOWER_URL", DEFAULT_API_URL), "tools": ["project", "proposal", "audit"]}, indent=2))
+        from .mcp_server import serve
+
+        return serve()
+    if args.command == "mcp-info":
+        from .mcp_server import tool_names
+
+        print(json.dumps({"name": "superpower", "api_url": os.environ.get("AI_SUPERPOWER_URL", DEFAULT_API_URL), "tools": tool_names()}, indent=2))
         return 0
     plan = install_agent(args.agent, api_url=args.api_url, start_server=args.start_server, dry_run=args.dry_run)
     print(f"superpower-clockless install plan: {plan.agent}")

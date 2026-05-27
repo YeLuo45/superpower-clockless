@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from superpower_clockless.installer import InstallError, install_agent, load_catalog
+from superpower_clockless.installer import InstallError, install_agent, load_catalog, run
 
 
 def test_catalog_contains_required_agents() -> None:
@@ -69,3 +69,11 @@ def test_claude_install_merges_json_and_instruction(tmp_path: Path, monkeypatch:
     data = json.loads((tmp_path / ".claude.json").read_text(encoding="utf-8"))
     assert data["mcpServers"]["superpower"]["args"] == ["mcp"]
     assert "Superpower Clockless" in (tmp_path / ".claude" / "CLAUDE.md").read_text(encoding="utf-8")
+
+
+def test_mcp_info_cli_lists_real_tools(capsys: pytest.CaptureFixture[str]) -> None:
+    assert run(["mcp-info"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["name"] == "superpower"
+    assert "proposal_create" in payload["tools"]
