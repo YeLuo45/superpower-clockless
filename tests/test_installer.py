@@ -19,14 +19,18 @@ def test_rejects_unsupported_agent() -> None:
         install_agent("unknown-agent", dry_run=True)
 
 
-def test_dry_run_hermes_does_not_write_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dry_run_hermes_includes_core_and_does_not_write_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
 
     plan = install_agent("hermes", api_url="http://127.0.0.1:8000", dry_run=True)
 
     assert plan.dry_run is True
+    assert plan.install_core is True
+    assert plan.install_root == str(tmp_path / ".superpower-clockless" / "ai-superpower")
+    assert any("core file" in action for action in plan.actions)
     assert any("copy" in action for action in plan.actions)
     assert any("config.yaml" in action for action in plan.actions)
+    assert not (tmp_path / ".superpower-clockless" / "ai-superpower").exists()
     assert not (tmp_path / ".hermes" / "config.yaml").exists()
 
 

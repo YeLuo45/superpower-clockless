@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable
 
+from .core import default_install_root
 from .installer import DEFAULT_API_URL, SUPPORTED_AGENTS, expand, load_catalog
 
 HealthProbe = Callable[[str, float], tuple[bool, str]]
@@ -90,6 +91,9 @@ def _doctor_one(agent: str, api_url: str, timeout: float, health_probe: HealthPr
         mcp_ok = _config_contains_mcp(config_path, agent, meta["mcpServerKey"])
         checks.append(DoctorCheck("mcp", mcp_ok, f"MCP server {meta['mcpServerKey']} {'configured' if mcp_ok else 'not configured'} in {config_path}"))
         checks.append(_skill_message(skill_path, agent))
+    core_root = default_install_root()
+    core_ok = (core_root / "pyproject.toml").exists() and (core_root / "config.toml").exists()
+    checks.append(DoctorCheck("core", core_ok, f"ai-superpower core {'found' if core_ok else 'missing'}: {core_root}"))
     api_ok, api_message = health_probe(api_url, timeout)
     checks.append(DoctorCheck("api", api_ok, api_message))
     return DoctorReport(agent=agent, api_url=api_url, checks=checks)

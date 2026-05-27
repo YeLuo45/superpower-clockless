@@ -111,7 +111,7 @@ def test_openclaw_install_and_start_server_dry_run(tmp_path, monkeypatch) -> Non
 
     plan = install_agent("openclaw", start_server=True, dry_run=True)
 
-    assert any("would run: ai-superpower run" in action for action in plan.actions)
+    assert any("would run from" in action and ".superpower-clockless/ai-superpower" in action for action in plan.actions)
     assert any("openclaw.json" in action for action in plan.actions)
 
 

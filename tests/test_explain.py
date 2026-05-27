@@ -18,6 +18,8 @@ def test_explain_single_agent_text_includes_paths_and_actions(tmp_path: Path, mo
     assert "api_url: http://127.0.0.1:9000" in output
     assert str(tmp_path / ".hermes" / "config.yaml") in output
     assert "mcp_server_key: superpower" in output
+    assert "install_core: true" in output
+    assert "core_actions:" in output
     assert "copy" in output
 
 
@@ -54,7 +56,7 @@ def test_explain_start_server_is_preview_only(tmp_path: Path, monkeypatch) -> No
 
     plan = build_explain_plans("cursor", start_server=True)[0]
 
-    assert "would run: ai-superpower run" in plan.actions
+    assert any("would run from" in action and ".superpower-clockless/ai-superpower" in action for action in plan.actions)
     assert not (tmp_path / ".cursor" / "mcp.json").exists()
 
 

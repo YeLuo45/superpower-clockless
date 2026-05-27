@@ -23,7 +23,7 @@ def test_doctor_reports_success_for_installed_hermes(tmp_path: Path, monkeypatch
 
     assert len(reports) == 1
     assert reports[0].ok is True
-    assert {check.name for check in reports[0].checks} == {"catalog", "config", "mcp", "skill", "api"}
+    assert {check.name for check in reports[0].checks} == {"catalog", "config", "mcp", "skill", "core", "api"}
     assert all(check.ok for check in reports[0].checks)
 
 
@@ -38,6 +38,7 @@ def test_doctor_detects_missing_codex_config_and_skill(tmp_path: Path, monkeypat
     assert checks["config"].ok is False
     assert checks["mcp"].ok is False
     assert checks["skill"].ok is False
+    assert checks["core"].ok is False
     assert checks["api"].ok is True
 
 
@@ -52,6 +53,7 @@ def test_doctor_api_failure_does_not_crash_and_preserves_local_checks(tmp_path: 
     assert checks["config"].ok is True
     assert checks["mcp"].ok is True
     assert checks["skill"].ok is True
+    assert checks["core"].ok is True
     assert checks["api"].ok is False
     assert "connection refused" in checks["api"].message
 
@@ -78,7 +80,7 @@ def test_doctor_json_cli_output(tmp_path: Path, monkeypatch, capsys) -> None:
     assert code == 0
     assert payload["ok"] is True
     assert payload["reports"][0]["agent"] == "cursor"
-    assert [check["name"] for check in payload["reports"][0]["checks"]] == ["catalog", "config", "mcp", "skill", "api"]
+    assert [check["name"] for check in payload["reports"][0]["checks"]] == ["catalog", "config", "mcp", "skill", "core", "api"]
 
 
 def test_doctor_is_non_mutating(tmp_path: Path, monkeypatch) -> None:

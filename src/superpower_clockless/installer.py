@@ -25,6 +25,9 @@ class InstallPlan:
     api_url: str
     start_server: bool
     dry_run: bool
+    install_core: bool
+    install_root: str | None
+    core_actions: list[str]
     actions: list[str]
 
 
@@ -135,23 +138,50 @@ AI_SUPERPOWER_API_KEY = "${{AI_SUPERPOWER_API_KEY}}"
     return append_unique(path, "# superpower-clockless BEGIN", block, dry_run=dry_run)
 
 
-def maybe_start_server(dry_run: bool) -> str:
+def maybe_start_server(dry_run: bool, core_path: str | None = None) -> str:
+    if core_path:
+        from .core import server_start_command
+
+        cmd = server_start_command(core_path)
+        if dry_run:
+            return f"would run from {core_path}: {' '.join(cmd)}"
+        subprocess.Popen(cmd, cwd=core_path, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        return f"started ai-superpower server in background from {core_path}"
     if dry_run:
         return "would run: ai-superpower run"
     if shutil.which("ai-superpower") is None and shutil.which("aisp") is None:
-        return "ai-superpower command not found; install ai-superpower first or use --no-start-server"
+        return "ai-superpower command not found; install ai-superpower first or use --skip-core"
     cmd = [shutil.which("ai-superpower") or shutil.which("aisp"), "run"]
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     return "started ai-superpower server in background"
 
 
-def install_agent(agent: str, *, api_url: str = DEFAULT_API_URL, start_server: bool = False, dry_run: bool = False) -> InstallPlan:
+def install_agent(
+    agent: str,
+    *,
+    api_url: str = DEFAULT_API_URL,
+    start_server: bool = False,
+    dry_run: bool = False,
+    install_core: bool = True,
+    install_root: str | None = None,
+    force_core: bool = False,
+) -> InstallPlan:
     catalog = load_catalog()
     if agent not in catalog:
         raise InstallError(f"unsupported agent: {agent}. supported: {', '.join(SUPPORTED_AGENTS)}")
 
     meta = catalog[agent]
     actions: list[str] = []
+    core_actions: list[str] = []
+    resolved_install_root = install_root
+    if install_core:
+        from .core import install_core_project
+
+        core_plan = install_core_project(install_root=install_root, dry_run=dry_run, force=force_core)
+        core_actions = core_plan.actions
+        resolved_install_root = core_plan.install_root
+        actions.extend(core_actions)
+
     skill_path = expand(meta["skillPath"])
     config_path = expand(meta["configPath"])
 
@@ -180,9 +210,18 @@ def install_agent(agent: str, *, api_url: str = DEFAULT_API_URL, start_server: b
         actions.append(append_unique(expand("~/.openclaw/SUPERPOWER.md"), "# Superpower Clockless", SUPERPOWER_NOTE.read_text(), dry_run=dry_run))
 
     if start_server:
-        actions.append(maybe_start_server(dry_run=dry_run))
+        actions.append(maybe_start_server(dry_run=dry_run, core_path=resolved_install_root if install_core else None))
 
-    return InstallPlan(agent=agent, api_url=api_url, start_server=start_server, dry_run=dry_run, actions=actions)
+    return InstallPlan(
+        agent=agent,
+        api_url=api_url,
+        start_server=start_server,
+        dry_run=dry_run,
+        install_core=install_core,
+        install_root=resolved_install_root,
+        core_actions=core_actions,
+        actions=actions,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -194,6 +233,9 @@ def build_parser() -> argparse.ArgumentParser:
     install.add_argument("--api-url", default=os.environ.get("AI_SUPERPOWER_URL", DEFAULT_API_URL))
     install.add_argument("--start-server", action="store_true")
     install.add_argument("--dry-run", action="store_true")
+    install.add_argument("--skip-core", action="store_true", help="only wire the agent; do not bootstrap ai-superpower core")
+    install.add_argument("--install-root", help="ai-superpower core install directory")
+    install.add_argument("--force-core", action="store_true", help="refresh existing bundled core scaffold files")
 
     doctor = sub.add_parser("doctor", help="validate local install and ai-superpower connectivity")
     doctor.add_argument("--agent", choices=("all",) + SUPPORTED_AGENTS, default="all")
@@ -205,6 +247,9 @@ def build_parser() -> argparse.ArgumentParser:
     explain.add_argument("agent", choices=("all",) + SUPPORTED_AGENTS)
     explain.add_argument("--api-url", default=os.environ.get("AI_SUPERPOWER_URL", DEFAULT_API_URL))
     explain.add_argument("--start-server", action="store_true")
+    explain.add_argument("--skip-core", action="store_true", help="preview adapter-only install")
+    explain.add_argument("--install-root", help="ai-superpower core install directory")
+    explain.add_argument("--force-core", action="store_true", help="preview core scaffold refresh")
     explain.add_argument("--json", action="store_true", dest="json_output")
 
     sub.add_parser("agents", help="list supported agents")
@@ -237,10 +282,25 @@ def run(argv: list[str] | None = None) -> int:
     if args.command == "explain":
         from .explain import build_explain_plans, format_explain_json, format_explain_text
 
-        plans = build_explain_plans(args.agent, api_url=args.api_url, start_server=args.start_server)
+        plans = build_explain_plans(
+            args.agent,
+            api_url=args.api_url,
+            start_server=args.start_server,
+            install_core=not args.skip_core,
+            install_root=args.install_root,
+            force_core=args.force_core,
+        )
         print(format_explain_json(plans) if args.json_output else format_explain_text(plans))
         return 0
-    plan = install_agent(args.agent, api_url=args.api_url, start_server=args.start_server, dry_run=args.dry_run)
+    plan = install_agent(
+        args.agent,
+        api_url=args.api_url,
+        start_server=args.start_server,
+        dry_run=args.dry_run,
+        install_core=not args.skip_core,
+        install_root=args.install_root,
+        force_core=args.force_core,
+    )
     print(f"superpower-clockless install plan: {plan.agent}")
     for action in plan.actions:
         print(f"- {action}")

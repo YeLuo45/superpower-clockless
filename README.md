@@ -23,12 +23,15 @@ The design follows the `agentmemory` pattern: one shared local service, plus thi
 
 ```bash
 pip install -e .
-export AI_SUPERPOWER_API_KEY="<your-ai-superpower-key>"
+export AI_SUPERPOWER_API_KEY="<your-key>"
 superpower-clockless agents
 superpower-clockless mcp-info
+superpower-clockless explain hermes
 superpower-clockless install hermes --dry-run
-superpower-clockless install hermes --api-url http://127.0.0.1:8000
+superpower-clockless install hermes --api-url http://127.0.0.1:8000 --start-server
 ```
+
+By default, install first bootstraps a local ai-superpower scaffold at `~/.superpower-clockless/ai-superpower`, then wires the selected agent to it. Use `--skip-core` only when ai-superpower is already installed elsewhere.
 
 Install other hosts by changing the agent name:
 
@@ -41,7 +44,7 @@ superpower-clockless install openclaw
 
 ## Runtime Model
 
-`superpower-clockless` does not replace ai-superpower. It wires agents to it.
+`superpower-clockless` now bootstraps a starter ai-superpower core when needed, then wires agents to that local service.
 
 ```text
 Hermes / OpenClaw / Cursor / Claude Code / Codex
@@ -61,6 +64,7 @@ projects.csv / proposals.csv / audit.log
 ```text
 src/superpower_clockless/
   api_client.py                # ai-superpower REST client
+  core.py                      # bundled ai-superpower core bootstrap
   doctor.py                    # post-install validation checks
   explain.py                   # non-mutating install preview plans
   mcp_server.py                # minimal MCP stdio bridge
@@ -116,6 +120,7 @@ The explain command reuses the install planner in dry-run mode and reports expan
 - All project/proposal data writes must go through ai-superpower API/CLI.
 - CSV files are data storage, not a user-editing interface.
 - Existing agent config files are merged, not replaced.
+- Default install bootstraps ai-superpower core before agent wiring; use `--skip-core` for adapter-only mode.
 - `--dry-run` shows planned filesystem changes without writing.
 
 ## Development
