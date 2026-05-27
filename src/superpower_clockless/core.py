@@ -35,6 +35,14 @@ def _copy_template(src: Path, dst: Path, *, dry_run: bool, force: bool) -> str:
     return f"copied core file {src} -> {dst}"
 
 
+def _copy_template_tree(template_root: Path, install_root: Path, *, dry_run: bool, force: bool) -> list[str]:
+    actions: list[str] = []
+    for src in sorted(path for path in template_root.rglob("*") if path.is_file()):
+        rel = src.relative_to(template_root)
+        actions.append(_copy_template(src, install_root / rel, dry_run=dry_run, force=force))
+    return actions
+
+
 def _starter_config(root: Path) -> str:
     return f'''[api]
 key = "${{AI_SUPERPOWER_API_KEY}}"
@@ -55,9 +63,7 @@ def install_core_project(*, install_root: str | Path | None = None, dry_run: boo
     root = expand(str(install_root)) if install_root is not None else default_install_root()
     actions: list[str] = []
 
-    for src in sorted(CORE_TEMPLATE.iterdir()):
-        if src.is_file():
-            actions.append(_copy_template(src, root / src.name, dry_run=dry_run, force=force))
+    actions.extend(_copy_template_tree(CORE_TEMPLATE, root, dry_run=dry_run, force=force))
 
     db_dir = root / "db"
     if dry_run:
