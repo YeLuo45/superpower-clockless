@@ -1,7 +1,7 @@
 ---
 name: prj-proposals-manager
 description: Manage the complete proposal lifecycle from intake to delivery, coordinating multiple Agents or roles (Coordinator / PM / Dev / Test Expert / Research Analyst). Covers intake, clarification, PRD confirmation, technical review, test case generation, development handoff, acceptance, and delivery. Platform-agnostic (works with Cursor, Hermes, OpenClaw, etc.)
-version: 4.0.0
+version: 4.1.0
 author: YeLuo45
 license: MIT
 metadata:
@@ -70,6 +70,47 @@ intake → clarifying → prd_pending_confirmation → approved_for_dev
 
 ---
 
+## Lifecycle Hooks
+
+Each lifecycle node can trigger pre/post hooks for automation, logging, or side effects. Hooks are defined in `proposal.notes` field (JSON) or via environment config.
+
+### Hook Trigger Points
+
+| Stage | Pre-Hook | Post-Hook | Available Variables |
+|-------|----------|-----------|-------------------|
+| `intake` | `on_intake_pre` | `on_intake_post` | `proposal_id`, `title`, `owner` |
+| `clarifying` | `on_clarifying_pre` | `on_clarifying_post` | `proposal_id`, `round` |
+| `prd_pending_confirmation` | `on_prd_pre` | `on_prd_post` | `proposal_id`, `prd_path` |
+| `approved_for_dev` | `on_approved_pre` | `on_approved_post` | `proposal_id`, `project_id` |
+| `in_dev` | `on_dev_pre` | `on_dev_post` | `proposal_id`, `project_path` |
+| `in_tdd_test` | `on_tdd_pre` | `on_tdd_post` | `proposal_id`, `test_cases_path` |
+| `in_test_acceptance` | `on_acceptance_pre` | `on_acceptance_post` | `proposal_id`, `test_results` |
+| `test_failed` | — | `on_test_failed_post` | `proposal_id`, `failure_reasons` |
+| `accepted` | — | `on_accepted_post` | `proposal_id`, `deployment_url` |
+| `deployed` | — | `on_deployed_post` | `proposal_id`, `deployment_url` |
+| `delivered` | — | `on_delivered_post` | `proposal_id`, `delivered_at` |
+
+### Defining Hooks in Proposal Notes
+
+```json
+{
+  "hooks": {
+    "on_intake_pre": "echo 'Intake started for P-YYYYMMDD-XXX' >> /tmp/lifecycle.log",
+    "on_approved_post": "/usr/local/bin/notify-slack.sh",
+    "on_deployed_post": "curl -X POST https://hooks.example.com/deploy $DEPLOYMENT_URL"
+  }
+}
+```
+
+### Hook Execution Rules
+- **Execution**: Coordinator executes hooks synchronously (blocking) before/after each transition
+- **Failure handling**: If pre-hook fails, block transition and report error. If post-hook fails, log error but allow transition to proceed
+- **Unattended mode**: Post-hooks run automatically; pre-hooks that would block use 30s timeout then skip
+- **No hooks defined**: Skip hook execution silently (no error)
+- **Variables**: Available in hook shell context as exported vars (`$proposal_id`, `$project_id`, etc.)
+
+---
+
 ## Operation Modes
 
 ### Default Mode (Interactive)
@@ -103,6 +144,41 @@ For continuous iteration when no user is present. Enabled when requester/boss sp
 - On delivery: always provide A/B/C/D iteration options, auto-select first
 - PRD/Technical expectation confirmation: auto-approve and continue after 5 min timeout
 - No clarification questions in unattended mode
+
+---
+
+## PM Role: UI Design Professional Capabilities
+
+When acting as PM, the Coordinator also fulfills UI Designer responsibilities. PM design capabilities are activated automatically when drafting PRD for visual/UI projects (e.g., web apps, mobile apps, interactive games).
+
+### Design Tool Access
+PM uses these professional design tools:
+- **open-design** — open-design.io collaborative design platform (primary)
+- **Figma** — when Open Design unavailable
+- **Excalidraw** — for architecture diagrams and rapid prototyping
+- **Canva** — for marketing/landing page mockups
+
+### Built-in Design System References
+
+PM defaults to these industry-leading design systems:
+
+| Design System |适用场景 | Key Specifications |
+|---|---|---|
+| **Apple macOS / iOS** | 桌面/移动原生感 | SF Pro 字体, 8pt grid, 动态字体, 毛玻璃效果, 41pt 触控目标 |
+| **Material Design 3** | Android 应用 / Material 组件库 | M3 组件, 4dp baseline, 色相系统, 动态配色 |
+| **Fluent Design** | Windows 应用 | acrylic/云母背景, 9pt grid, reveal highlight |
+| **Human Interface Guidelines (HIG)** | Apple 平台全品类 | 隐私/完整性/美学三大原则, 栏位结构, 手势导航 |
+| **Ant Design** | 企业中台 / React 技术栈 | 4px spacing, 24-column grid, 40+原子组件 |
+| **Carbon Design** | B端数据密集型应用 | IBM Carbon, 2x grid, 暗黑主题优先 |
+
+### Design Review Checklist (Per PRD)
+When drafting UI-related PRD, PM must cover:
+1. **Layout**: Grid system, responsive breakpoints, safe area
+2. **Typography**: Font family, scale (type ramp), line height
+3. **Color**: Brand palette, semantic colors (success/error/warning), contrast ratio ≥ 4.5:1
+4. **Components**: Core UI elements, states (default/hover/active/disabled), variant
+5. **Accessibility**: Keyboard navigation, screen reader, focus order, ARIA labels
+6. **Animation**: Transitions, micro-interactions, duration/curve
 
 ---
 
