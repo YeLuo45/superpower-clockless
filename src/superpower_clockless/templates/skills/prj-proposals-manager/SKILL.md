@@ -1,7 +1,7 @@
 ---
 name: prj-proposals-manager
 description: Manage the complete proposal lifecycle from intake to delivery, coordinating multiple Agents or roles (Coordinator / PM / Dev / Test Expert / Research Analyst). Covers intake, clarification, PRD confirmation, technical review, test case generation, development handoff, acceptance, and delivery. Platform-agnostic (works with Cursor, Hermes, OpenClaw, etc.)
-version: 4.4.0
+version: 4.5.0
 author: YeLuo45
 license: MIT
 metadata:
@@ -108,6 +108,57 @@ Each lifecycle node can trigger pre/post hooks for automation, logging, or side 
 - **Unattended mode**: Post-hooks run automatically; pre-hooks that would block use 30s timeout then skip
 - **No hooks defined**: Skip hook execution silently (no error)
 - **Variables**: Available in hook shell context as exported vars (`$proposal_id`, `$project_id`, etc.)
+
+---
+
+## Task Decomposition for Complex Requirements
+
+When a proposal contains a complex, multi-component requirement, Coordinator breaks it into discrete sub-tasks tracked as a todo list, rather than a single monolithic deliverable. Sub-tasks can run sequentially or in parallel (via delegation).
+
+### When to Decompose
+
+Coordinator triggers task decomposition when any of these conditions are met:
+- PRD contains 3+ independent features
+- Any single feature requires >3 distinct implementation steps
+- Features have different tech stacks or skill requirements
+- PRD explicitly marks requirement as `complex: true`
+
+### Decomposition Process
+
+1. **Identify sub-tasks**: Break PRD into atomic units (e.g., "Auth module", "API endpoint", "UI component", "Unit tests")
+2. **Create sub-task items**: Record each in proposal notes as JSON task list:
+   ```json
+   {
+     "tasks": [
+       {"id": "T1", "content": "Implement auth module", "status": "pending"},
+       {"id": "T2", "content": "Build API endpoint", "status": "pending", "depends_on": ["T1"]},
+       {"id": "T3", "content": "UI dashboard", "status": "pending", "depends_on": ["T2"]},
+       {"id": "T4", "content": "Integration tests", "status": "pending", "depends_on": ["T2"]}
+     ]
+   }
+   ```
+3. **Resolve dependencies**: Tasks with `depends_on` wait for those tasks to complete before starting
+4. **Assign parallel tracks**: Independent tasks (T1, T2 if no T2→T1 dependency) can be delegated concurrently
+5. **Track progress**: Update `status` in proposal notes as each sub-task completes (`pending` → `in_progress` → `completed`)
+6. **Completion gate**: Proposal only transitions to `accepted` when ALL tasks are `completed`
+
+### Sub-task Handoff to Dev
+
+When handing off sub-tasks to Dev:
+- Provide the sub-task's `id`, `content`, and `depends_on` context
+- Dev reports per-task completion (not just overall completion)
+- Test Expert validates each sub-task independently before marking `completed`
+
+### Progress Reporting
+
+At any point, Coordinator can answer "what's the status of this proposal?" by summarizing:
+```
+Proposal P-YYYYMMDD-XXX: 2/4 tasks completed
+  T1 ✅ Auth module — completed
+  T2 ✅ API endpoint — completed
+  T3 🔄 UI dashboard — in progress
+  T4 ⏳ Integration tests — pending (waiting on T3)
+```
 
 ---
 
