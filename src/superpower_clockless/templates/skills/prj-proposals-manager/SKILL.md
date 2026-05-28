@@ -16,17 +16,25 @@ metadata:
 A platform-agnostic skill for managing proposal lifecycle across multi-role workflows (Coordinator / PM / Dev / Test Expert / Research Analyst). Covers intake, clarification, PRD confirmation, technical review, test case generation, development handoff, acceptance, and delivery.
 
 ## ⚠️ Core Rule
-**All project/proposal data operations MUST go through the ai-superpower API. Direct CSV access is prohibited.**
+**All project/proposal data operations MUST go through the superpower-clockless MCP bridge (tools below). Direct CSV access is prohibited.**
 
-**API endpoint**: ai-superpower server (default `http://127.0.0.1:8000`)
-**API key**: dfd374c2e1c2443292ec8f8c791a92a5
+**MCP Tools** (exposed by `superpower-clockless mcp`):
+| Tool | Purpose |
+|------|---------|
+| `health` | Check ai-superpower server health |
+| `project_list` | List projects (search, page_size) |
+| `project_get` | Get project by ID |
+| `proposal_list` | List proposals (project_id, search, page_size) |
+| `proposal_get` | Get proposal by ID |
+| `proposal_create` | Create proposal (title, owner, project_id, stage) |
+| `proposal_update_fields` | Update proposal fields (proposal_id, fields) |
+| `proposal_update_status` | Transition proposal status through state machine (proposal_id, status) |
 
-> **⚠️ Port confusion**: Server confirmed on **port 8000** (2026-05-24 testing). Config may say 8001 but actual is 8000.
-> **API key access**: `curl` does NOT expand `$VAR` inside single quotes. Use Python urllib instead.
-> **Proposal create-only**: The API is **create-only** for POST. Once created, proposal field updates use `POST /api/proposals/{id}/fields` (not PUT/PATCH). Status transitions use `POST /api/proposals/{id}/status`. Both confirmed working as of 2026-05-26.
-> **Stage values at creation**: `stage` field only accepts `approved_for_dev` at creation time. Values like `intake`, `clarifying`, `prd_pending_confirmation` return `422 Unprocessable Entity`. The working stage value for proposal creation is `approved_for_dev`.
-
-> Set it once: `export SUPERPOWER_API_KEY="your-key-here"` (or in `.bashrc` for persistence) — but the key itself comes from `~/.ai-superpower/config.toml`.
+> **⚠️ No direct API access**: Do NOT use `curl`, `requests`, or `urllib` to call ai-superpower. Always use MCP tools above.
+> **MCP tool syntax**: Tools accept JSON objects as arguments, e.g. `{"name": "proposal_create", "arguments": {"title": "...", "owner": "...", "project_id": "...", "stage": "approved_for_dev"}}`
+> **Stage values at creation**: Only `stage: "approved_for_dev"` is accepted at creation time. Values like `intake`, `clarifying`, `prd_pending_confirmation` return `422 Unprocessable Entity`.
+> **Field updates**: Use `proposal_update_fields` for fields (tech_expectations, notes, etc.), NOT PUT/PATCH.
+> **Status transitions**: Use `proposal_update_status` for state machine transitions — follow `intake → clarifying → prd_pending_confirmation → approved_for_dev → in_dev`.
 
 ---
 
@@ -128,7 +136,7 @@ When the request is to clone an existing GitHub repo and register as a proposal 
    ```bash
    ai-superpower project create --name "ProjectName" --git-repo "https://github.com/owner/repo"
    ```
-2. Create proposal via ai-superpower API (ID auto-generated, no manual management)
+2. Create proposal via MCP tool `proposal_create` (ID auto-generated, no manual management)
 3. Create gh-pages branch for the proposal (if project has remote repo):
    ```bash
    cd $DEV_PROPOSALS/<project-name>
@@ -136,9 +144,10 @@ When the request is to clone an existing GitHub repo and register as a proposal 
    ```
 4. Copy `$TEMPLATES_DIR/request-intake-template.md` to proposal directory
 5. Fill in basic info and original request
-6. Create proposal via ai-superpower API:
-   ```bash
-   ai-superpower proposal create --title "ProposalTitle" --owner "coordinator" --project-id "PRJ-YYYYMMDD-XXX" --stage "intake"
+6. Create proposal via MCP tool `proposal_create`:
+   ```
+   Tool: proposal_create
+   Arguments: {"title": "ProposalTitle", "owner": "coordinator", "project_id": "PRJ-YYYYMMDD-XXX", "stage": "approved_for_dev"}
    ```
 
 ### Step 2: Clarify Requirements
@@ -146,9 +155,10 @@ When the request is to clone an existing GitHub repo and register as a proposal 
 - Max 3 rounds of clarifying questions, focused on: goals, scope, constraints, acceptance criteria
 - Record each Q&A round in the proposal's "Clarification" section
 - After 3 rounds or when requirements are clear, record final assumptions
-- Transition status to `clarifying`:
-  ```bash
-  ai-superpower proposal update P-YYYYMMDD-XXX --status clarifying
+- Transition status via MCP tool `proposal_update_status`:
+  ```
+  Tool: proposal_update_status
+  Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "status": "clarifying"}
   ```
 
 ### Step 3: Transfer to PM
@@ -157,9 +167,10 @@ If the request is just an idea or rough draft, transfer to PM role to generate P
 
 - PM saves PRD to `$PM_PROPOSALS/PRJ-YYYYMMDD-XXX/YYYY-MM-DD-prd.md`
 - PM also copies PRD to `$DEV_PROPOSALS/<project-name>/docs/prd.v1.md`
-- Update PRD path via ai-superpower API:
-  ```bash
-  ai-superpower proposal update P-YYYYMMDD-XXX --prd-path "$PM_PROPOSALS/PRJ-YYYYMMDD-XXX/YYYY-MM-DD-prd.md"
+- Update PRD path via MCP tool `proposal_update_fields`:
+  ```
+  Tool: proposal_update_fields
+  Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "fields": {"prd_path": "$PM_PROPOSALS/PRJ-YYYYMMDD-XXX/YYYY-MM-DD-prd.md"}}
   ```
 
 ### Step 4: PRD Confirmation Gate
@@ -171,8 +182,9 @@ After PM returns PRD:
 3. Record countdown reference in "PRD Confirmation Countdown ID"
 
 If confirmed: set PRD Confirmation to `confirmed`, cancel countdown, immediately transition to `approved_for_dev` and start development.
-```bash
-ai-superpower proposal update P-YYYYMMDD-XXX --status approved_for_dev
+```
+Tool: proposal_update_status
+Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "status": "approved_for_dev"}
 ```
 
 If timeout: set PRD Confirmation to `timeout-approved`, record in "Timeout Resolution", immediately transition to `approved_for_dev` and start development.
@@ -200,9 +212,10 @@ If timeout: set Technical Expectations to `timeout-approved`, proceed with curre
 
 - Output to `$superpower-root/P-YYYYMMDD-XXX-tech-solution.md`
 - Also copy to `$DEV_PROPOSALS/<project-name>/docs/technical-solution.v1.md`
-- Update via ai-superpower API:
-  ```bash
-  ai-superpower proposal update P-YYYYMMDD-XXX --tech-solution-path "$superpower-root/P-YYYYMMDD-XXX-tech-solution.md"
+- Update via MCP tool `proposal_update_fields`:
+  ```
+  Tool: proposal_update_fields
+  Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "fields": {"tech_solution_path": "$superpower-root/P-YYYYMMDD-XXX-tech-solution.md"}}
   ```
 
 ### Step 6b: TDD Test Case Generation
@@ -217,20 +230,23 @@ After technical solution output, transfer to Test Expert to generate test cases 
    - Cover normal paths and edge cases
    - Copy to `$superpower-dev/<project-name>/proposals/docs/test-cases.v1.md`
 
-3. Transition status to `in_tdd_test` via ai-superpower API:
-   ```bash
-   ai-superpower proposal update P-YYYYMMDD-XXX --status in_tdd_test
+3. Transition status via MCP tool `proposal_update_status`:
+   ```
+   Tool: proposal_update_status
+   Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "status": "in_tdd_test"}
    ```
 
 ### Step 7: Handoff to Dev
 
-- Transition status to `in_dev`:
-  ```bash
-  ai-superpower proposal update P-YYYYMMDD-XXX --status in_dev
+Transition status via MCP tool `proposal_update_status`:
   ```
-- Update project_path:
-  ```bash
-  ai-superpower proposal update P-YYYYMMDD-XXX --project-path "$DEV_PROPOSALS/<project-name>"
+  Tool: proposal_update_status
+  Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "status": "in_dev"}
+  ```
+- Update project_path via MCP tool `proposal_update_fields`:
+  ```
+  Tool: proposal_update_fields
+  Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "fields": {"project_path": "$DEV_PROPOSALS/<project-name>"}}
   ```
 - If directory doesn't exist, Dev creates `$DEV_PROPOSALS/<project-name>/docs/`
 
@@ -254,28 +270,32 @@ Functional verification (must实际操作, not just screenshots):
 - Existing features not broken
 - Build succeeds
 
-Transition status to `in_test_acceptance` during acceptance:
-```bash
-ai-superpower proposal update P-YYYYMMDD-XXX --status in_test_acceptance
+Transition status via MCP tool `proposal_update_status`:
+```
+Tool: proposal_update_status
+Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "status": "in_test_acceptance"}
 ```
 
 If all test cases pass: proceed to Step 9 (delivery)
 
 If any test case fails: transition to `test_failed`, output structured revision feedback:
-```bash
-ai-superpower proposal update P-YYYYMMDD-XXX --status test_failed
+```
+Tool: proposal_update_status
+Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "status": "test_failed"}
 ```
 
 ### Step 9: Delivery or Revision
 
 If all test cases pass: transition to `accepted`, proceed to Step 10 (research direction):
-```bash
-ai-superpower proposal update P-YYYYMMDD-XXX --status accepted
+```
+Tool: proposal_update_status
+Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "status": "accepted"}
 ```
 
 If acceptance fails: transition to `needs_revision`, output structured revision feedback:
-```bash
-ai-superpower proposal update P-YYYYMMDD-XXX --status needs_revision
+```
+Tool: proposal_update_status
+Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "status": "needs_revision"}
 ```
 
 ### Step 10: Research Direction (Post-Acceptance Iteration Planning)
@@ -300,105 +320,141 @@ After acceptance passes (status becomes `accepted`):
 4. Push to remote
 5. Trigger deployment
 6. Update proposal: transition to `deployed`, record Deployment URL:
-   ```bash
-   ai-superpower proposal update P-YYYYMMDD-XXX --status deployed --deployment-url "https://..."
+   ```
+   Tool: proposal_update_status
+   Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "status": "deployed"}
+   Tool: proposal_update_fields
+   Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "fields": {"deployment_url": "https://..."}}
    ```
 
 ---
 
-## API Quick Reference
+## MCP Tool Reference
 
-All operations use HTTP REST API, Base URL = `http://127.0.0.1:8001`, Header: `X-API-Key: {key}`
+All operations use `superpower-clockless mcp` tools, invoked via the MCP bridge. Below is the complete tool schema reference.
 
-> **Full endpoint documentation**: see `../../ai-superpower/docs/api/`:
-> - `projects.md` — Project CRUD endpoints
-> - `proposals.md` — Proposal CRUD + status transitions
-> - `utilities.md` — Audit, validate, health, CLI reference
+> **Full MCP tool documentation**: run `superpower-clockless mcp-info` to inspect tool names and schemas without starting the stdio loop.
 
-### Project Operations (Python)
-```python
-import os
-base_url = "http://127.0.0.1:8000"  # Port 8000 confirmed 2026-05-24
-
-# ai-superpower/docs/api/projects_api.py
-from projects_api import ProjectsAPI
-api = ProjectsAPI(api_key=os.environ["SUPERPOWER_API_KEY"], base_url=base_url)
-
-api.list(search="keyword", sort_by="last_update", sort_order="desc")
-api.get("PRJ-20260523-001")
-api.create(name="my-project", git_repo="https://github.com/owner/repo")
-api.update("PRJ-20260523-001", name="new-name")
-api.delete("PRJ-20260523-001")   # requires allow_delete=true
+### Tool: health
+Check ai-superpower server health. No arguments.
+```
+Tool: health
 ```
 
-### Proposal Operations (Python)
-```python
-import os
-base_url = "http://127.0.0.1:8000"  # Port 8000 confirmed 2026-05-24
-
-# ai-superpower/docs/api/proposals_api.py
-from proposals_api import ProposalsAPI
-api = ProposalsAPI(api_key=os.environ["SUPERPOWER_API_KEY"], base_url=base_url)
-
-api.list(project_id="PRJ-20260523-001", status="in_dev", search="keyword")
-api.get("P-20260523-001")
-api.create(title="proposal-title", owner="owner", project_id="PRJ-20260523-001", stage="ideation")
-api.update_fields("P-YYYYMMDD-XXX", tech_expectations="timeout-approved", notes="...")
-api.update_status("P-YYYYMMDD-XXX", status="in_dev")   # state machine transition
-api.delete("P-YYYYMMDD-XXX")   # requires allow_delete=true
+### Tool: project_list
+List projects with optional search filter and pagination.
 ```
+Tool: project_list
+Arguments: {"search": "keyword", "page_size": 50}
+```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `search` | string | No | Filter by project name/keyword |
+| `page_size` | integer | No | Results per page (default 50, max 200) |
 
-### Direct HTTP (when Python API wrapper is unavailable)
-### Direct HTTP (when Python API wrapper is unavailable)
-```python
-import urllib.request, json
+### Tool: project_get
+Get a single project by ID.
+```
+Tool: project_get
+Arguments: {"project_id": "PRJ-YYYYMMDD-XXX"}
+```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `project_id` | string | Yes | Project ID |
 
-api_key = open("/home/hermes/.ai-superpower/config.toml").read().split('key = "')[1].split('"')[0]
-base_url = "http://127.0.0.1:8000"  # Port 8000 confirmed 2026-05-24
-# If 8000 refused, try 8001
-# If both fail → server is down, check: ps aux | grep uvicorn
+### Tool: proposal_list
+List proposals with optional filters.
+```
+Tool: proposal_list
+Arguments: {"project_id": "PRJ-YYYYMMDD-XXX", "search": "keyword", "page_size": 50}
+```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `project_id` | string | No | Filter by project |
+| `search` | string | No | Filter by title/keyword |
+| `page_size` | integer | No | Results per page (default 50, max 200) |
 
-# Update fields (tech_expectations, notes, etc.) — PUT /api/proposals/{id}/fields
-payload = json.dumps({"tech_expectations": "timeout-approved", "notes": "ai SDK + ..."}).encode()
-req = urllib.request.Request(
-    f"{base_url}/api/proposals/P-20260502-017/fields",
-    data=payload, method='PUT',
-    headers={'X-API-Key': api_key, 'Content-Type': 'application/json'}
-)
-with urllib.request.urlopen(req) as resp:
-    result = json.loads(resp.read())
+### Tool: proposal_get
+Get a single proposal by ID.
+```
+Tool: proposal_get
+Arguments: {"proposal_id": "P-YYYYMMDD-XXX"}
+```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `proposal_id` | string | Yes | Proposal ID |
 
-# Update status (state machine) — PUT /api/proposals/{id}/status
-payload2 = json.dumps({"status": "in_dev"}).encode()
-req2 = urllib.request.Request(
-    f"{base_url}/api/proposals/P-20260502-017/status",
-    data=payload2, method='PUT',
-    headers={'X-API-Key': api_key, 'Content-Type': 'application/json'}
-)
+### Tool: proposal_create
+Create a new proposal. Only `stage: "approved_for_dev"` is accepted at creation time.
+```
+Tool: proposal_create
+Arguments: {"title": "My Proposal", "owner": "coordinator", "project_id": "PRJ-YYYYMMDD-XXX", "stage": "approved_for_dev"}
+```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | string | Yes | Proposal title |
+| `owner` | string | Yes | Owner name |
+| `project_id` | string | Yes | Project ID |
+| `stage` | string | Yes | Must be `"approved_for_dev"` |
+
+### Tool: proposal_update_fields
+Update proposal fields (tech_expectations, notes, prd_path, tech_solution_path, project_path, deployment_url, etc.).
+```
+Tool: proposal_update_fields
+Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "fields": {"tech_expectations": "confirmed", "notes": "iteration notes"}}
+```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `proposal_id` | string | Yes | Proposal ID |
+| `fields` | object | Yes | Key-value pairs of fields to update |
+
+### Tool: proposal_update_status
+Transition proposal status through the state machine. Follows strict transitions: `intake → clarifying → prd_pending_confirmation → approved_for_dev → in_dev → in_tdd_test → in_test_acceptance → accepted → deployed → delivered`. Also: `in_dev → needs_revision → in_dev`, `in_test_acceptance → test_failed → in_dev`.
+```
+Tool: proposal_update_status
+Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "status": "in_dev"}
+```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `proposal_id` | string | Yes | Proposal ID |
+| `status` | string | Yes | Target status |
+
+### Example: Create project and proposal (MCP chain)
+```
+# 1. Create project
+Tool: project_create  # Note: via ai-superpower CLI, not MCP
+CLI: ai-superpower project create --name "MyProject" --git-repo "https://github.com/owner/repo"
+
+# 2. List projects to get project_id
+Tool: project_list
+Arguments: {"search": "MyProject"}
+
+# 3. Create proposal
+Tool: proposal_create
+Arguments: {"title": "Feature A", "owner": "coordinator", "project_id": "PRJ-YYYYMMDD-XXX", "stage": "approved_for_dev"}
+
+# 4. Get the new proposal to confirm ID
+Tool: proposal_list
+Arguments: {"project_id": "PRJ-YYYYMMDD-XXX", "search": "Feature A"}
 ```
 
 ### Server Down Recovery
-If both port 8000 and 8001 return connection refused:
+If MCP tools return connection errors:
 ```bash
-# Check if ai-superpower process is running
+# Check if superpower-clockless can reach the server
+superpower-clockless doctor
+
+# Check ai-superpower process
 ps aux | grep -E 'uvicorn|fastapi' | grep -v grep
 
-# Check listening ports
-ss -tlnp | grep -E '8000|8001|8002'
-
-# If server is down, cannot perform API operations
-# All proposal updates must wait for server restart
+# Check ports
+ss -tlnp | grep -E '8000|8001'
 ```
 
-### Audit Log
+### Audit Log (via MCP)
 ```python
-# ai-superpower/docs/api/utilities_api.py
-from utilities_api import UtilitiesAPI
-api = UtilitiesAPI(api_key=os.environ["SUPERPOWER_API_KEY"])
-
-api.audit(page=1, page_size=100, entity="proposal", op="status_change")
-api.validate({"title": "test", "owner": "me", "project_id": "PRJ-20260523-001", "stage": "ideation"})
-api.health()
+# Audit log is accessible through the ai-superpower REST API directly when needed for recovery
+# Use MCP tool proposal_get to retrieve full proposal state
 ```
 
 ---
@@ -433,8 +489,8 @@ When Coordinator fixes directly, record to:
 ### Backup
 
 ```bash
-export SUPERPOWER_API_KEY="your-key"
-export SUPERPOWER_ROOT="/home/hermes/proposals"
+source ~/.superpower-clockless/env  # Unix
+# or: .\.\superpower-clockless\env.bat  # Windows
 bash scripts/backup_proposals.sh
 ```
 
@@ -486,10 +542,10 @@ bash scripts/rollback_proposals.sh proposal P-YYYYMMDD-XXX
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `SUPERPOWER_API_KEY` | API key (copied from `~/.ai-superpower/config.toml`) |
-| `SUPERPOWER_ROOT` | Root directory, defaults to `/home/hermes/proposals` |
+|| Variable | Description |
+||----------|-------------|
+|| `AI_SUPERPOWER_API_KEY` | API key (written by `superpower-clockless install` to `~/.superpower-clockless/env`; source it with `source ~/.superpower-clockless/env` on Unix or `.\.superpower-clockless\env.bat` on Windows) |
+|| `AI_SUPERPOWER_URL` | API base URL, defaults to `http://127.0.0.1:8000` |
 
 ---
 
