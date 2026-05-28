@@ -1,7 +1,7 @@
 ---
 name: prj-proposals-manager
 description: Manage the complete proposal lifecycle from intake to delivery, coordinating multiple Agents or roles (Coordinator / PM / Dev / Test Expert / Research Analyst). Covers intake, clarification, PRD confirmation, technical review, test case generation, development handoff, acceptance, and delivery. Platform-agnostic (works with Cursor, Hermes, OpenClaw, etc.)
-version: 4.2.0
+version: 4.3.0
 author: YeLuo45
 license: MIT
 metadata:
@@ -108,6 +108,33 @@ Each lifecycle node can trigger pre/post hooks for automation, logging, or side 
 - **Unattended mode**: Post-hooks run automatically; pre-hooks that would block use 30s timeout then skip
 - **No hooks defined**: Skip hook execution silently (no error)
 - **Variables**: Available in hook shell context as exported vars (`$proposal_id`, `$project_id`, etc.)
+
+---
+
+## Architecture Refactor Trigger
+
+After N completed iteration proposals under the same project (default: 6, configurable via `AI_SUPERPOWER_REFACTOR_ITERATIONS` env var), the project enters **mandatory architecture refactor phase**. Dev is handed off with an explicit "Architect" mandate instead of regular feature development.
+
+**Configuration:**
+```bash
+export AI_SUPERPOWER_REFACTOR_ITERATIONS=6  # default 6, set to any positive integer; 0 disables
+```
+
+**Trigger detection:**
+- Coordinator counts all proposals under the project with `stage: accepted` or `stage: deployed`
+- When count % `AI_SUPERPOWER_REFACTOR_ITERATIONS` == 0, Coordinator sets `needs_revision` with refactor mandate
+- Coordinator records in proposal notes: `"refactor_mandate": true`, `"refactor_count": <N>`
+
+**Architect handoff requirements (Architect mandate):**
+1. Full code audit: identify coupling, debt, performance bottlenecks, security surface
+2. Produce `ARCHITECTURE.md` — module decomposition, data flow, technology choices with rationale
+3. Produce `REFACTOR.md` — prioritized action items with estimated effort
+4. All refactoring commits must pass existing test suite before merging
+5. No new features during refactor phase — scope freeze
+
+**Exit condition:** Refactor phase ends when Architect submits `ARCHITECTURE.md` + `REFACTOR.md` AND all existing tests pass. Coordinator transitions back to normal `in_dev` flow.
+
+**Project repo reference:** https://github.com/YeLuo45/superpowers
 
 ---
 
@@ -430,11 +457,11 @@ When researching iteration directions, Coordinator automatically enriches with e
 
 After acceptance passes (status becomes `accepted`):
 
-1. Determine deployment target: GitHub Pages or Cloudflare Pages
+1. Determine deployment target from project config or environment variable `AI_SUPERPOWER_DEPLOY_TARGET`
 2. Create deployment branch
 3. Prepare deployment (ensure package-lock.json is committed, run `npm run build`)
 4. Push to remote
-5. Trigger deployment
+5. Trigger deployment via target-specific method (see Deployment Targets below)
 6. Update proposal: transition to `deployed`, record Deployment URL:
    ```
    Tool: proposal_update_status
@@ -442,6 +469,34 @@ After acceptance passes (status becomes `accepted`):
    Tool: proposal_update_fields
    Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "fields": {"deployment_url": "https://..."}}
    ```
+
+#### Deployment Targets
+
+| Target | Environment Config | Deploy Method |
+|--------|------------------|---------------|
+| **GitHub Pages** | `AI_SUPERPOWER_DEPLOY_TARGET=github-pages` | Push to `gh-pages` branch, GitHub Actions auto-deploy |
+| **Cloudflare Pages** | `AI_SUPERPOWER_DEPLOY_TARGET=cloudflare-pages` | `wrangler pages deploy` via Cloudflare Workers |
+| **Aliyun OSS** | `AI_SUPERPOWER_DEPLOY_TARGET=aliyun-oss` | `ossutil` or Aliyun CLI upload; requires `ALIYUN_ACCESS_KEY_ID` + `ALIYUN_ACCESS_KEY_SECRET` + `ALIYUN_BUCKET` + `ALIYUN_REGION` |
+| **AWS S3** | `AI_SUPERPOWER_DEPLOY_TARGET=aws-s3` | `aws s3 sync` to S3 bucket; requires `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` + `AWS_BUCKET` + `AWS_REGION` |
+| **Vercel** | `AI_SUPERPOWER_DEPLOY_TARGET=vercel` | `vercel --prod`; requires `VERCEL_TOKEN` |
+| **Netlify** | `AI_SUPERPOWER_DEPLOY_TARGET=netlify` | `netlify deploy --prod`; requires `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` |
+
+**Adding new targets:** Add new row to the table above. Coordinator reads `AI_SUPERPOWER_DEPLOY_TARGET` env var. If value is unrecognized, Coordinator reports error and falls back to listing supported targets.
+
+**Target-specific env vars (set on ai-superpower host):**
+```bash
+# Aliyun OSS
+export ALIYUN_ACCESS_KEY_ID=...
+export ALIYUN_ACCESS_KEY_SECRET=...
+export ALIYUN_BUCKET=my-bucket
+export ALIYUN_REGION=cn-hangzhou
+
+# AWS S3
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_BUCKET=my-bucket
+export AWS_REGION=us-east-1
+```
 
 ---
 
