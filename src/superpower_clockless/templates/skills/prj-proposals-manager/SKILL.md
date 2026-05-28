@@ -1,7 +1,7 @@
 ---
 name: prj-proposals-manager
 description: Manage the complete proposal lifecycle from intake to delivery, coordinating multiple Agents or roles (Coordinator / PM / Dev / Test Expert / Research Analyst). Covers intake, clarification, PRD confirmation, technical review, test case generation, development handoff, acceptance, and delivery. Platform-agnostic (works with Cursor, Hermes, OpenClaw, etc.)
-version: 4.1.0
+version: 4.2.0
 author: YeLuo45
 license: MIT
 metadata:
@@ -386,6 +386,46 @@ If confirmed: set Research Direction to `confirmed`, immediately transfer to PM 
 
 If timeout: set Research Direction to `timeout-approved`, Coordinator decides independently, immediately transfer to PM for next iteration PRD.
 
+#### Research Extension: Online Search + GitHub Intelligence
+
+When researching iteration directions, Coordinator automatically enriches with external sources beyond user input:
+
+**Step 10a: User-Provided Directions**
+- Record all directions explicitly mentioned by requester
+- These are primary — external sources supplement, not replace
+
+**Step 10b: Online Search Expansion**
+- Search web for relevant technology trends, competitor features, emerging patterns
+- Search target: product category keywords + "best practices", "2024 2025 trends", "design patterns"
+- Use `web` toolset for search
+
+**Step 10c: GitHub Intelligence**
+- Query GitHub Trending for the project's tech stack (language/framework)
+- Identify top 10 open-source projects in the same domain
+- For each trending repo: note stars, recent commits, README highlights, architecture patterns
+- Filter for projects with: 100+ stars, activity in last 6 months, permissive license (MIT/Apache2)
+
+**Step 10d: Synthesize Research**
+- Combine user directions + web findings + GitHub intelligence
+- Rank by relevance to current project
+- Present top candidates as iteration options (A/B/C/D/E format)
+- In unattended mode: auto-select first option after 5 min
+
+**Research Sources Priority:**
+| Source | Use When |
+|--------|----------|
+| Requester-provided | Always (required input) |
+| Web search (web tool) | UI/UX improvements, new features |
+| GitHub Trending | Tech stack validation, architecture inspiration |
+| GitHub Top10 repos | Feature parity check, differentiation opportunities |
+
+**GitHub Trending Query Example:**
+```bash
+# Query GitHub trending for React projects in past week
+# Use web search: "site:github.com/trending react since:2025-01-01"
+# Filter results for 1000+ stars, recent activity
+```
+
 ### Step 11: Deployment (Post-Acceptance Delivery)
 
 After acceptance passes (status becomes `accepted`):
@@ -562,7 +602,46 @@ When Coordinator fixes directly, record to:
 
 ## Backup and Rollback
 
-### Backup
+### Auto-Backup (Automatic Proposal Backup)
+
+After each `intake` → `clarifying` transition, Coordinator tracks the cumulative count of new proposals created. After every N proposals (default: 5, configurable via `AI_SUPERPOWER_BACKUP_INTERVAL` env var), a mandatory backup is triggered before proceeding.
+
+**Configuration:**
+```bash
+export AI_SUPERPOWER_BACKUP_INTERVAL=5  # default 5, set to any positive integer
+```
+
+**Trigger logic:**
+1. On each `intake` → `clarifying` transition, Coordinator increments a session counter
+2. When counter % `AI_SUPERPOWER_BACKUP_INTERVAL` == 0, block workflow and run auto-backup first
+3. Backup runs via MCP tool calls (not direct CSV): paginate `/api/projects` + `/api/proposals`, write to `superpower-backups/backup_YYYYMMDD_HHMMSS/`
+4. After backup completes, log backup path in proposal notes: `"last_backup": "superpower-backups/backup_YYYYMMDD_HHMMSS/"`
+5. Resume workflow immediately
+
+**Backup via MCP (not direct CSV):**
+```python
+# Paginate all projects
+page = 1
+while True:
+    result = mcp("project_list", {"page": page, "page_size": 200})
+    items = result["items"]
+    if len(items) >= result["total"]:
+        break
+    page += 1
+
+# Paginate all proposals
+page = 1
+while True:
+    result = mcp("proposal_list", {"page": page, "page_size": 200})
+    items = result["items"]
+    if len(items) >= result["total"]:
+        break
+    page += 1
+```
+
+**If backup interval env var is 0 or not set**: auto-backup is disabled (manual backup only).
+
+### Manual Backup
 
 ```bash
 source ~/.superpower-clockless/env  # Unix
