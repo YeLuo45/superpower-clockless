@@ -604,39 +604,18 @@ When Coordinator fixes directly, record to:
 
 ### Auto-Backup (Automatic Proposal Backup)
 
-After each `intake` → `clarifying` transition, Coordinator tracks the cumulative count of new proposals created. After every N proposals (default: 5, configurable via `AI_SUPERPOWER_BACKUP_INTERVAL` env var), a mandatory backup is triggered before proceeding.
+ai-superpower internally tracks the cumulative count of proposals created. After every N proposals (default: 5, configurable via `AI_SUPERPOWER_BACKUP_INTERVAL` env var), the system automatically triggers a backup before the workflow can proceed past the `intake` → `clarifying` transition gate.
 
-**Configuration:**
+**Coordinator role — no manual backup execution needed:**
+
+The Coordinator does NOT run backup scripts. It only:
+1. Reads `last_backup` from proposal notes to confirm backup has run
+2. If `last_backup` is absent and counter threshold is met, reports "Backup pending — please ensure ai-superpower auto-backup is active"
+3. Records backup confirmation in the proposal audit trail
+
+**Configuration (set on ai-superpower host):**
 ```bash
-export AI_SUPERPOWER_BACKUP_INTERVAL=5  # default 5, set to any positive integer
-```
-
-**Trigger logic:**
-1. On each `intake` → `clarifying` transition, Coordinator increments a session counter
-2. When counter % `AI_SUPERPOWER_BACKUP_INTERVAL` == 0, block workflow and run auto-backup first
-3. Backup runs via MCP tool calls (not direct CSV): paginate `/api/projects` + `/api/proposals`, write to `superpower-backups/backup_YYYYMMDD_HHMMSS/`
-4. After backup completes, log backup path in proposal notes: `"last_backup": "superpower-backups/backup_YYYYMMDD_HHMMSS/"`
-5. Resume workflow immediately
-
-**Backup via MCP (not direct CSV):**
-```python
-# Paginate all projects
-page = 1
-while True:
-    result = mcp("project_list", {"page": page, "page_size": 200})
-    items = result["items"]
-    if len(items) >= result["total"]:
-        break
-    page += 1
-
-# Paginate all proposals
-page = 1
-while True:
-    result = mcp("proposal_list", {"page": page, "page_size": 200})
-    items = result["items"]
-    if len(items) >= result["total"]:
-        break
-    page += 1
+export AI_SUPERPOWER_BACKUP_INTERVAL=5  # default 5, set to any positive integer; 0 disables
 ```
 
 **If backup interval env var is 0 or not set**: auto-backup is disabled (manual backup only).
