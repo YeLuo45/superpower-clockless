@@ -1,7 +1,7 @@
 ---
 name: prj-proposals-manager
 description: Manage the complete proposal lifecycle from intake to delivery, coordinating multiple Agents or roles (Coordinator / PM / Dev / Test Expert / Research Analyst). Covers intake, clarification, PRD confirmation, technical review, test case generation, development handoff, acceptance, and delivery. Platform-agnostic (works with Cursor, Hermes, OpenClaw, etc.)
-version: 4.3.0
+version: 4.4.0
 author: YeLuo45
 license: MIT
 metadata:
@@ -333,7 +333,18 @@ After technical solution output, transfer to Test Expert to generate test cases 
    - Cover normal paths and edge cases
    - Copy to `$superpower-dev/<project-name>/proposals/docs/test-cases.v1.md`
 
-3. Transition status via MCP tool `proposal_update_status`:
+3. **UI Testing Enhancement (from GitHub Intelligence)**
+   - Search GitHub for existing test patterns in the project's tech stack (e.g., `playwright react testing`, `selenium e2e`, `testing-library best practices`)
+   - Identify top 5 UI testing repositories with 500+ stars for the same framework
+   - Extract test structure, page object patterns, and coverage strategies
+   - For UI-heavy projects, add mandatory UI test cases from GitHub examples:
+     - Visual regression tests (snapshot or pixel-diff)
+     - Responsive layout tests (mobile/tablet/desktop breakpoints)
+     - Accessibility tests (axe-core, keyboard navigation, screen reader)
+     - Loading state / skeleton / error boundary tests
+     - Interaction tests: hover, focus, keyboard, touch, drag-drop
+
+4. Transition status via MCP tool `proposal_update_status`:
    ```
    Tool: proposal_update_status
    Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "status": "in_tdd_test"}
@@ -389,7 +400,21 @@ Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "status": "test_failed"}
 
 ### Step 9: Delivery or Revision
 
-If all test cases pass: transition to `accepted`, proceed to Step 10 (research direction):
+**Before transitioning to `accepted`, Test Expert must complete post-acceptance documentation:**
+
+1. **Update README**: Ensure project README reflects the latest deliverable:
+   - Update version number (if versioned)
+   - Update feature list / changelog
+   - Update deployment instructions if deployment target changed
+   - Update screenshots/demo links if UI changed
+
+2. **Update SPEC**: Sync `SPEC.md` (or `SPEC.vN.md`) with accepted implementation:
+   - Mark all implemented requirements as `DONE`
+   - Add implementation notes for any deviations from original spec
+   - Update architecture diagrams if system structure changed
+   - Record any new constraints or technical decisions
+
+3. After README + SPEC update, transition to `accepted`:
 ```
 Tool: proposal_update_status
 Arguments: {"proposal_id": "P-YYYYMMDD-XXX", "status": "accepted"}
