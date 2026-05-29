@@ -77,12 +77,25 @@ bootstrap.ps1 脚本直接下载运行——无需 GitHub Releases 附件。
 ## 快速开始
 
 ```bash
+# 安装 superpower-clockless（可编辑模式，从本地克隆仓库）
 pip install -e .
+
+# 设置 ai-superpower API 密钥（从 https://github.com/YeLuo45/ai-superpower 获取）
 export AI_SUPERPOWER_API_KEY="<your-key>"
+
+# 列出所有支持的 Agent 及其集成状态
 superpower-clockless agents
+
+# 显示可用的 MCP 桥接工具（不启动 stdio 循环）
 superpower-clockless mcp-info
+
+# 预览 hermes 安装计划（不写入任何文件）
 superpower-clockless explain hermes
+
+# 演练：显示 hermes 集成的计划文件系统变更
 superpower-clockless install hermes --dry-run
+
+# 完整安装：配置 hermes + 在 http://127.0.0.1:8000 启动 ai-superpower 服务
 superpower-clockless install hermes --api-url http://127.0.0.1:8000 --start-server
 ```
 

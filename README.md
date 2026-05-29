@@ -77,12 +77,25 @@ The bootstrap.ps1 script downloads and runs directly — no GitHub Releases atta
 ## Quick Start
 
 ```bash
+# Install superpower-clockless in editable mode (from local repo clone)
 pip install -e .
+
+# Set your ai-superpower API key (get it from https://github.com/YeLuo45/ai-superpower)
 export AI_SUPERPOWER_API_KEY="<your-key>"
+
+# List all supported agents and their integration status
 superpower-clockless agents
+
+# Show available MCP bridge tools without starting the stdio loop
 superpower-clockless mcp-info
+
+# Preview what an hermes install would do (no files written)
 superpower-clockless explain hermes
+
+# Dry run: show planned filesystem changes for hermes integration
 superpower-clockless install hermes --dry-run
+
+# Full install: configure hermes + start ai-superpower server on http://127.0.0.1:8000
 superpower-clockless install hermes --api-url http://127.0.0.1:8000 --start-server
 ```
 
