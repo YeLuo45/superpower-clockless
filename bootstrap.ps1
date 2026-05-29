@@ -51,9 +51,9 @@ function git_clone_or_pull($url, $dir, $branch = "main") {
     if (Test-Path $dir) {
         Write-Host "[git] $dir exists, pulling latest..." -ForegroundColor Yellow
         Set-Location $dir
-        $output = git pull origin $branch 2>&1
+        git pull origin $branch 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "[git] pull failed (using existing): $output" -ForegroundColor Yellow
+            Write-Host "[git] pull failed (using existing files)" -ForegroundColor Yellow
         }
     } else {
         Write-Host "[git] Cloning $url ..." -ForegroundColor Yellow
