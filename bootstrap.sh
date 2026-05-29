@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # superpower-clockless bootstrap script
-# Detects OS, installs Python 3 if missing, sets up superpower-clockless in a venv
+# Detects OS, installs Python 3 if missing, clones repo, sets up superpower-clockless in a venv
 
 set -e
 
@@ -38,7 +38,6 @@ detect_os() {
 # Check if Python 3.10+ is available
 check_python() {
     if command -v python3 &>/dev/null; then
-        PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
         PYTHON_MAJOR=$(python3 -c 'import sys; print(sys.version_info[0])')
         PYTHON_MINOR=$(python3 -c 'import sys; print(sys.version_info[1])')
         if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 10 ]; then
@@ -89,36 +88,36 @@ install_python() {
             ;;
     esac
 
-    # Verify python3 is now available
     if ! command -v python3 &>/dev/null; then
         echo "[bootstrap] ERROR: Python 3 installation failed."
         exit 1
     fi
 }
 
-# Create venv and install superpower-clockless
+# Clone superpower-clockless repo locally
+clone_repo() {
+    LOCAL_DIR="$HOME/superpower-clockless"
+    if [ -d "$LOCAL_DIR" ]; then
+        echo "[bootstrap] Repo already exists at $LOCAL_DIR, pulling latest..."
+        git -C "$LOCAL_DIR" pull origin main || echo "[bootstrap] git pull failed, using existing files"
+    else
+        echo "[bootstrap] Cloning superpower-clockless repo..."
+        git clone https://github.com/YeLuo45/superpower-clockless.git "$LOCAL_DIR"
+    fi
+}
+
+# Create venv and install superpower-clockless from local source
 setup_venv() {
     VENV_DIR="$HOME/.superpower-clockless/venv"
+    LOCAL_DIR="$HOME/superpower-clockless"
+
     echo "[bootstrap] Creating virtual environment at $VENV_DIR..."
     python3 -m venv "$VENV_DIR"
     echo "[bootstrap] Upgrading pip..."
-    "$VENV_DIR/bin/pip" install --upgrade pip -q
+    "$VENV_DIR/bin/pip" install --upgrade pip --timeout 60 -q
 
-    # Get superpower-clockless install URL or use local path
-    # If cloned locally, install from current dir; otherwise install from PyPI
-    if [ -f "$(dirname "$0")/pyproject.toml" ] || [ -f "$HOME/superpower-clockless/pyproject.toml" ]; then
-        SCL_DIR="$HOME/superpower-clockless"
-        if [ -f "$SCL_DIR/pyproject.toml" ]; then
-            echo "[bootstrap] Installing superpower-clockless from local source: $SCL_DIR"
-            "$VENV_DIR/bin/pip" install -e "$SCL_DIR" -q
-        else
-            echo "[bootstrap] Installing superpower-clockless from PyPI..."
-            "$VENV_DIR/bin/pip" install superpower-clockless -q
-        fi
-    else
-        echo "[bootstrap] Installing superpower-clockless from PyPI..."
-        "$VENV_DIR/bin/pip" install superpower-clockless -q
-    fi
+    echo "[bootstrap] Installing superpower-clockless from local source: $LOCAL_DIR"
+    "$VENV_DIR/bin/pip" install -e "$LOCAL_DIR" --timeout 60 -q
 
     if ! "$VENV_DIR/bin/superpower-clockless" --version &>/dev/null; then
         echo "[bootstrap] ERROR: superpower-clockless installation failed."
@@ -162,6 +161,7 @@ main() {
         echo "[bootstrap] Python 3.10+ found."
     fi
 
+    clone_repo
     setup_venv
     write_env
 

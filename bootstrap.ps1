@@ -1,5 +1,5 @@
-# superpower-clockless standalone Windows installer
-# Downloads bootstrap script and runs it, or installs superpower-clockless directly
+# superpower-clockless Windows bootstrap installer
+# Clones repo locally, installs from source — no PyPI needed
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -7,12 +7,8 @@ $ProgressPreference = "SilentlyContinue"
 Write-Host "=== superpower-clockless Windows Installer ===" -ForegroundColor Cyan
 Write-Host ""
 
-# Detect admin rights
-function Test-Admin {
-    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
-    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
+$LOCAL_DIR = "$env:USERPROFILE\superpower-clockless"
+$VENV_DIR = "$env:USERPROFILE\.superpower-clockless\venv"
 
 # Check Python
 function Get-PythonVersion {
@@ -22,53 +18,55 @@ function Get-PythonVersion {
             return @{
                 major = [int]$Matches[1]
                 minor = [int]$Matches[2]
-                ok = ($matches[1] -eq 3 -and $matches[2] -ge 10)
+                ok = ($Matches[1] -eq 3 -and $Matches[2] -ge 10)
             }
         }
     } catch {}
     return @{ ok = $false }
 }
 
-# Download and run bootstrap
-function Install-Bootstrap {
-    Write-Host "[installer] Downloading bootstrap.ps1..." -ForegroundColor Yellow
-    try {
-        $script = Invoke-RestMethod -Uri "https://raw.githubusercontent.com/YeLuo45/superpower-clockless/main/bootstrap.ps1" -TimeoutSec 30
-        $scriptPath = "$env:TEMP\superpower-clockless-bootstrap.ps1"
-        Set-Content -Path $scriptPath -Value $script -Encoding UTF8
-        Write-Host "[installer] Running bootstrap script..." -ForegroundColor Yellow
-        & $scriptPath
-        Remove-Item $scriptPath -Force -EA SilentlyContinue
-        return $true
-    } catch {
-        Write-Host "[installer] Bootstrap script not found, using direct install..." -ForegroundColor Yellow
-        return $false
+# Clone or update repo
+function Clone-Repo {
+    if (Test-Path $LOCAL_DIR) {
+        Write-Host "[installer] Repo exists at $LOCAL_DIR, pulling latest..." -ForegroundColor Yellow
+        Set-Location $LOCAL_DIR
+        git pull origin main 2>$null | Out-Null
+    } else {
+        Write-Host "[installer] Cloning superpower-clockless repo..." -ForegroundColor Yellow
+        git clone https://github.com/YeLuo45/superpower-clockless.git $LOCAL_DIR
+        Set-Location $LOCAL_DIR
     }
 }
 
-# Direct install (no bootstrap.ps1 available)
-function Install-Direct {
-    Write-Host "[installer] Checking Python 3.10+..." -ForegroundColor Yellow
-    $py = Get-PythonVersion
-    if (-not $py.ok) {
-        Write-Host "[installer] Python 3.10+ not found. Please install Python from:" -ForegroundColor Red
-        Write-Host "  https://www.python.org/downloads/" -ForegroundColor Cyan
-        Write-Host "  OR: winget install Python.Python.3.11" -ForegroundColor Cyan
-        return $false
+# Install from local source
+function Install-Local {
+    Write-Host "[installer] Creating virtual environment at $VENV_DIR..." -ForegroundColor Yellow
+    if (Test-Path $VENV_DIR) {
+        Remove-Item -Path $VENV_DIR -Recurse -Force
     }
-    Write-Host "[installer] Python $($py.major).$($py.minor) found. Good!" -ForegroundColor Green
-
-    Write-Host "[installer] Creating virtual environment..." -ForegroundColor Yellow
-    $venvDir = "$env:USERPROFILE\.superpower-clockless\venv"
-    python -m venv $venvDir
+    python -m venv $VENV_DIR
 
     Write-Host "[installer] Upgrading pip..." -ForegroundColor Yellow
-    & "$venvDir\Scripts\pip.exe" install --upgrade pip -q
+    & "$VENV_DIR\Scripts\pip.exe" install --upgrade pip --timeout 60 -q 2>$null
 
-    Write-Host "[installer] Installing superpower-clockless..." -ForegroundColor Yellow
-    & "$venvDir\Scripts\pip.exe" install superpower-clockless -q
+    Write-Host "[installer] Installing superpower-clockless from local source..." -ForegroundColor Yellow
+    Set-Location $LOCAL_DIR
+    $output = & "$VENV_DIR\Scripts\pip.exe" install -e . --timeout 60 -q 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[installer] pip install failed. Output:" -ForegroundColor Red
+        Write-Host $output
+        return $false
+    }
 
-    Write-Host "[installer] Writing env.bat..." -ForegroundColor Yellow
+    if (-not (Test-Path "$VENV_DIR\Scripts\superpower-clockless.exe")) {
+        Write-Host "[installer] ERROR: superpower-clockless.exe not found after install." -ForegroundColor Red
+        return $false
+    }
+    return $true
+}
+
+# Write env.bat
+function Write-EnvBat {
     $envBat = "$env:USERPROFILE\.superpower-clockless\env.bat"
     $envDir = Split-Path $envBat -Parent
     if (-not (Test-Path $envDir)) { New-Item -ItemType Directory -Path $envDir -Force | Out-Null }
@@ -76,7 +74,7 @@ function Install-Direct {
     @"
 @echo off
 REM superpower-clockless environment
-REM Auto-generated by install.ps1
+REM Auto-generated by bootstrap.ps1
 
 REM ai-superpower API key (REQUIRED)
 REM Get your key from: https://github.com/YeLuo45/ai-superpower
@@ -87,32 +85,38 @@ if exist "%USERPROFILE%\.superpower-clockless\venv\Scripts\activate.bat" (
     call "%USERPROFILE%\.superpower-clockless\venv\Scripts\activate.bat"
 )
 "@ | Set-Content -Path $envBat -Encoding ASCII
+}
+
+# Main
+$py = Get-PythonVersion
+if (-not $py.ok) {
+    Write-Host "[installer] ERROR: Python 3.10+ not found. Please install Python first:" -ForegroundColor Red
+    Write-Host "  https://www.python.org/downloads/" -ForegroundColor Cyan
+    Write-Host "  OR: winget install Python.Python.3.11" -ForegroundColor Cyan
+    exit 1
+}
+
+Write-Host "[installer] Python $($py.major).$($py.minor) found. Good!" -ForegroundColor Green
+
+try {
+    Clone-Repo
+    $ok = Install-Local
+    if (-not $ok) { throw "Install-Local failed" }
+    Write-EnvBat
 
     Write-Host ""
     Write-Host "=== Installation Complete ===" -ForegroundColor Green
     Write-Host ""
     Write-Host "Next steps:" -ForegroundColor Cyan
-    Write-Host "1. Edit $envBat and add your API key:" -ForegroundColor White
+    Write-Host "1. Edit $env:USERPROFILE\.superpower-clockless\env.bat and add your API key:" -ForegroundColor White
     Write-Host '   set "AI_SUPERPOWER_API_KEY=<your-key>"'
     Write-Host ""
     Write-Host "2. Run: .\.superpower-clockless\env.bat" -ForegroundColor White
     Write-Host ""
     Write-Host "3. Verify: superpower-clockless agents" -ForegroundColor White
-    return $true
-}
-
-# Main
-$py = Get-PythonVersion
-if ($py.ok) {
-    Write-Host "[installer] Python $($py.major).$($py.minor) found. Using direct install." -ForegroundColor Green
-    $ok = Install-Direct
-} else {
-    Write-Host "[installer] No Python found. Attempting bootstrap..." -ForegroundColor Yellow
-    $ok = Install-Direct
-}
-
-if (-not $ok) {
+} catch {
     Write-Host ""
-    Write-Host "Installation completed with warnings." -ForegroundColor Yellow
-    Write-Host "Please ensure Python 3.10+ is installed manually." -ForegroundColor Yellow
+    Write-Host "[installer] ERROR: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Installation incomplete. Please try again or install manually." -ForegroundColor Yellow
+    exit 1
 }
