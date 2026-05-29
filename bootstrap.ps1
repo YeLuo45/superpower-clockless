@@ -30,7 +30,11 @@ function Clone-Repo {
     if (Test-Path $LOCAL_DIR) {
         Write-Host "[installer] Repo exists at $LOCAL_DIR, pulling latest..." -ForegroundColor Yellow
         Set-Location $LOCAL_DIR
-        git pull origin main 2>$null | Out-Null
+        $pullOutput = git pull origin main 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[installer] git pull failed: $pullOutput" -ForegroundColor Yellow
+            Write-Host "[installer] Using existing files..." -ForegroundColor Yellow
+        }
     } else {
         Write-Host "[installer] Cloning superpower-clockless repo..." -ForegroundColor Yellow
         git clone https://github.com/YeLuo45/superpower-clockless.git $LOCAL_DIR
