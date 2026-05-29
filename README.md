@@ -66,11 +66,11 @@ Access ai-superpower API at `http://localhost:8000`. The container runs the ai-s
 Download the standalone Windows executable from GitHub Releases:
 
 ```powershell
-# Download and run installer
-irm https://github.com/YeLuo45/superpower-clockless/releases/latest/download/install.ps1 | iex
+# Download and run installer (no Python required)
+irm https://raw.githubusercontent.com/YeLuo45/superpower-clockless/main/bootstrap.ps1 | iex
 ```
 
-The standalone binary includes a bundled Python runtime — no Python installation required on Windows.
+The bootstrap.ps1 script downloads and runs directly — no GitHub Releases attachment needed.
 
 ---
 

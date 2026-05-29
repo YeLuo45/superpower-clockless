@@ -67,10 +67,10 @@ ai-superpower API 访问地址：`http://localhost:8000`。容器内运行 ai-su
 
 ```powershell
 # 下载并运行安装脚本
-irm https://github.com/YeLuo45/superpower-clockless/releases/latest/download/install.ps1 | iex
+irm https://raw.githubusercontent.com/YeLuo45/superpower-clockless/main/bootstrap.ps1 | iex
 ```
 
-独立可执行文件已包含 Python 运行时——Windows 上无需安装 Python。
+bootstrap.ps1 脚本直接下载运行——无需 GitHub Releases 附件。
 
 ---
 
