@@ -19,6 +19,61 @@ The design follows the `agentmemory` pattern: one shared local service, plus thi
 | Claude Code | `~/.claude.json` MCP block + `CLAUDE.md` workflow note |
 | Codex CLI | `~/.codex/config.toml` MCP block + `AGENTS.md` workflow note |
 
+## Installation Without Python
+
+`superpower-clockless` is a Python application. If you don't have Python installed, use one of the methods below.
+
+### Option 1: Bootstrap Script (Linux/macOS)
+
+Run the bootstrap script — it detects your OS, installs Python 3 if missing, then sets up `superpower-clockless`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/YeLuo45/superpower-clockless/main/bootstrap.sh | bash
+```
+
+The bootstrap script:
+1. Detects OS (Linux/macOS)
+2. Installs Python 3.10+ via system package manager (`apt`/`brew`/`yum`)
+3. Creates a Python virtual environment at `~/.superpower-clockless/venv`
+4. Installs `superpower-clockless` into the venv
+5. Writes `~/.superpower-clockless/env` with API key export prompt
+
+After bootstrap, add to shell profile:
+```bash
+# Unix
+echo 'source ~/.superpower-clockless/env' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### Option 2: Docker
+
+```bash
+# Pull latest image
+docker pull yeluo45/superpower-clockless:latest
+
+# Run with API key and port
+docker run -d \
+  --name superpower-clockless \
+  -p 8000:8000 \
+  -e AI_SUPERPOWER_API_KEY="<your-key>" \
+  yeluo45/superpower-clockless:latest
+```
+
+Access ai-superpower API at `http://localhost:8000`. The container runs the ai-superpower server + superpower-clockless MCP bridge.
+
+### Option 3: Standalone Binary (Windows)
+
+Download the standalone Windows executable from GitHub Releases:
+
+```powershell
+# Download and run installer
+irm https://github.com/YeLuo45/superpower-clockless/releases/latest/download/install.ps1 | iex
+```
+
+The standalone binary includes a bundled Python runtime — no Python installation required on Windows.
+
+---
+
 ## Quick Start
 
 ```bash

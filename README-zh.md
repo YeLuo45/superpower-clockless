@@ -17,7 +17,62 @@ Superpower 提案系统的跨 Agent 安装器。
 | OpenClaw | `~/.openclaw/openclaw.json` MCP 块 + 扩展技能复制 |
 | Cursor | `~/.cursor/mcp.json` MCP 块 + 常驻规则 |
 | Claude Code | `~/.claude.json` MCP 块 + `CLAUDE.md` 工作流备注 |
-| Codex CLI | `~/.codex/config.toml` MCP 块 + `AGENTS.md` 工作流备注 |
+|| Codex CLI | `~/.codex/config.toml` MCP 块 + `AGENTS.md` 工作流备注 |
+
+## 无 Python 环境安装
+
+`superpower-clockless` 是 Python 应用。如果没有安装 Python，可使用以下方式。
+
+### 方式一：Bootstrap 脚本（Linux/macOS）
+
+运行 bootstrap 脚本——它会自动检测系统、安装 Python（如缺失），然后配置 superpower-clockless：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/YeLuo45/superpower-clockless/main/bootstrap.sh | bash
+```
+
+Bootstrap 脚本会：
+1. 检测操作系统（Linux/macOS）
+2. 通过系统包管理器安装 Python 3.10+（`apt`/`brew`/`yum`）
+3. 在 `~/.superpower-clockless/venv` 创建 Python 虚拟环境
+4. 将 superpower-clockless 安装到虚拟环境
+5. 写入 `~/.superpower-clockless/env` 并提示设置 API key
+
+安装完成后，添加到 shell 配置文件：
+```bash
+# Unix
+echo 'source ~/.superpower-clockless/env' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### 方式二：Docker
+
+```bash
+# 拉取最新镜像
+docker pull yeluo45/superpower-clockless:latest
+
+# 运行容器
+docker run -d \
+  --name superpower-clockless \
+  -p 8000:8000 \
+  -e AI_SUPERPOWER_API_KEY="<your-key>" \
+  yeluo45/superpower-clockless:latest
+```
+
+ai-superpower API 访问地址：`http://localhost:8000`。容器内运行 ai-superpower 服务 + superpower-clockless MCP 桥接。
+
+### 方式三：独立可执行文件（Windows）
+
+从 GitHub Releases 下载 Windows 独立可执行文件：
+
+```powershell
+# 下载并运行安装脚本
+irm https://github.com/YeLuo45/superpower-clockless/releases/latest/download/install.ps1 | iex
+```
+
+独立可执行文件已包含 Python 运行时——Windows 上无需安装 Python。
+
+---
 
 ## 快速开始
 
