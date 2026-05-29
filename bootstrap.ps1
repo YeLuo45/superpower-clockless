@@ -51,7 +51,8 @@ function Install-Local {
 
     Write-Host "[installer] Installing superpower-clockless from local source..." -ForegroundColor Yellow
     Set-Location $LOCAL_DIR
-    $output = & "$VENV_DIR\Scripts\pip.exe" install -e . --timeout 60 -q 2>&1
+    $venvPip = "$VENV_DIR\Scripts\pip.exe"
+    $output = & $venvPip install -e "$LOCAL_DIR" --timeout 60 -q 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[installer] pip install failed. Output:" -ForegroundColor Red
         Write-Host $output
