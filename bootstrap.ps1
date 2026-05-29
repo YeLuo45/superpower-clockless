@@ -104,20 +104,28 @@ try {
     $ok = Install-Local
     if (-not $ok) { throw "Install-Local failed" }
     Write-EnvBat
-
-    Write-Host ""
-    Write-Host "=== Installation Complete ===" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Next steps:" -ForegroundColor Cyan
-    Write-Host "1. Edit $env:USERPROFILE\.superpower-clockless\env.bat and add your API key:" -ForegroundColor White
-    Write-Host '   set "AI_SUPERPOWER_API_KEY=<your-key>"'
-    Write-Host ""
-    Write-Host "2. Run: .\.superpower-clockless\env.bat" -ForegroundColor White
-    Write-Host ""
-    Write-Host "3. Verify: superpower-clockless agents" -ForegroundColor White
 } catch {
     Write-Host ""
     Write-Host "[installer] ERROR: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "Installation incomplete. Please try again or install manually." -ForegroundColor Yellow
-    exit 1
+} finally {
+    Write-Host ""
+    Write-Host "=== Installation Complete ===" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Next steps:" -ForegroundColor Cyan
+    Write-Host "1. Get your AI_SUPERPOWER_API_KEY from:" -ForegroundColor White
+    Write-Host "   https://github.com/YeLuo45/ai-superpower" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "2. Edit the env.bat file:" -ForegroundColor White
+    Write-Host "   notepad %USERPROFILE%\.superpower-clockless\env.bat" -ForegroundColor Yellow
+    Write-Host "   (remove 'REM' from the API key line and replace 'your-key-here' with your actual key)" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "3. Run in a new terminal:" -ForegroundColor White
+    Write-Host "   .\.superpower-clockless\env.bat" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "4. Verify the install:" -ForegroundColor White
+    Write-Host "   superpower-clockless agents" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Press Enter to exit..." -ForegroundColor Gray
+    Read-Host
 }
