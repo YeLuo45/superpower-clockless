@@ -7,8 +7,8 @@
 #   3. Let user choose an AI agent (Hermes / Cursor / Codex / Claude Code / OpenClaw)
 #   4. Install superpower-clockless (provides MCP bridge)
 #   5. Install skills and MCP configuration for the chosen agent
-#   6. Set AI_SUPERPOWER_API_KEY (user-provided or auto-generated)
-#   7. Install ai-superpower dependencies
+# superpower-clockless bootstrap installer
+# Full setup: Python + ai-superpower + Agent skills + MCP bridge
 
 param(
     [string]$ApiKey = "",
@@ -18,7 +18,10 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-Write-Host "=== superpower-clockless Bootstrap ===" -ForegroundColor Cyan
+$BOOTSTRAP_VERSION = "1.0.4"
+$BOOTSTRAP_COMMIT = "219f381"
+
+Write-Host "=== superpower-clockless Bootstrap v$BOOTSTRAP_VERSION ($BOOTSTRAP_COMMIT) ===" -ForegroundColor Cyan
 Write-Host ""
 
 # ---------------------------------------------------------------------------

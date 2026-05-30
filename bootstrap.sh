@@ -1,19 +1,13 @@
 #!/usr/bin/env bash
 # superpower-clockless bootstrap installer
 # Full setup: Python + ai-superpower + Agent skills + MCP bridge
-#
-# What it does:
-#   1. Detect / install Python 3.10+
-#   2. Clone superpower-clockless and ai-superpower repos
-#   3. Let user choose an AI agent (Hermes / Cursor / Codex / Claude Code / OpenClaw)
-#   4. Install superpower-clockless (provides MCP bridge)
-#   5. Install skills and MCP configuration for the chosen agent
-#   6. Set AI_SUPERPOWER_API_KEY (user-provided or auto-generated)
-#   7. Install ai-superpower dependencies
 
 set -e
 
-echo "=== superpower-clockless Bootstrap ==="
+BOOTSTRAP_VERSION="1.0.4"
+BOOTSTRAP_COMMIT="219f381"
+
+echo "=== superpower-clockless Bootstrap v$BOOTSTRAP_VERSION ($BOOTSTRAP_COMMIT) ==="
 echo ""
 
 # ---------------------------------------------------------------------------
