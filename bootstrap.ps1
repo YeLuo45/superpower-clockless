@@ -54,13 +54,13 @@ function git_clone_or_pull($url, $dir, $branch = "main") {
     if (Test-Path $dir) {
         Write-Host "[git] $dir exists, pulling latest..." -ForegroundColor Yellow
         Set-Location $dir
-        git pull origin $branch 2>nul 1>nul
+        git pull origin $branch -ErrorAction SilentlyContinue 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) {
             Write-Host "[git] pull failed (using existing files)" -ForegroundColor Yellow
         }
     } else {
         Write-Host "[git] Cloning $url ..." -ForegroundColor Yellow
-        git clone -b $branch $url $dir 2>nul 1>nul
+        git clone -b $branch $url $dir -ErrorAction SilentlyContinue 2>$null | Out-Null
         Set-Location $dir
     }
 }
@@ -144,11 +144,11 @@ Write-Host "  Creating virtual environment..." -ForegroundColor Yellow
 python -m venv $VENV_DIR
 
 Write-Host "  Upgrading pip..." -ForegroundColor Yellow
-& "$VENV_DIR\Scripts\pip.exe" install --upgrade pip --timeout 60 -q 2>nul 1>nul
+& "$VENV_DIR\Scripts\pip.exe" install --upgrade pip --timeout 60 -q 2>&1 | Out-Null
 
 Write-Host "  Installing superpower-clockless..." -ForegroundColor Yellow
 Set-Location $SC_DIR
-$output = & "$VENV_DIR\Scripts\pip.exe" install -e . --timeout 60 -q 2>nul 1>nul
+$output = & "$VENV_DIR\Scripts\pip.exe" install -e . --timeout 60 -q 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  pip install failed: $output" -ForegroundColor Red
     exit 1
