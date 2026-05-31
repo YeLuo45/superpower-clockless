@@ -15,11 +15,11 @@ param(
     [string]$Agent = ""
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $ProgressPreference = "SilentlyContinue"
 
-$BOOTSTRAP_VERSION = "1.0.4"
-$BOOTSTRAP_COMMIT = "219f381"
+$BOOTSTRAP_VERSION = "1.0.5"
+$BOOTSTRAP_COMMIT = "5b192e6"
 
 Write-Host "=== superpower-clockless Bootstrap v$BOOTSTRAP_VERSION ($BOOTSTRAP_COMMIT) ===" -ForegroundColor Cyan
 Write-Host ""
