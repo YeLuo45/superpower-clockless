@@ -237,6 +237,21 @@ async function submitProjectForm(e) {
     } catch (e) { alert('Error: ' + e.message); }
 }
 
+async function checkDuplicateProject() {
+    const name = document.getElementById('name').value;
+    const gitRepo = document.getElementById('git_repo').value;
+    if (!name && !gitRepo) { alert('Enter name or git_repo first'); return; }
+    try {
+        const qs = new URLSearchParams({ name, git_repo: gitRepo }).toString();
+        const result = await api('GET', '/projects/check-duplicate?' + qs);
+        if (result.duplicate) {
+            alert('Duplicate found: ' + result.reason + ', existing ID: ' + result.existing_id);
+        } else {
+            alert('No duplicate found');
+        }
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
 // ─── Proposals ────────────────────────────────────────────────────────────────
 
 async function loadProposals(page = 1) {
@@ -254,11 +269,13 @@ async function loadProposals(page = 1) {
         const el = document.getElementById('proposal-list');
         if (!data.items.length) { el.innerHTML = '<p>No proposals found.</p>'; }
         else {
-            el.innerHTML = `<table><thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Stage</th><th>Owner</th><th>Project</th><th></th><th></th></tr></thead><tbody>
+            el.innerHTML = `<table><thead><tr><th>ID</th><th>Title</th><th>Status</th><th>Stage</th><th>Owner</th><th>Project</th><th>Created</th><th>Updated</th><th></th><th></th></tr></thead><tbody>
                 ${data.items.map(p => `<tr>
                     <td>${p.id}</td><td>${esc(p.title)}</td>
                     <td><span class="badge badge-${esc(p.status)}">${p.status}</span></td>
                     <td>${p.stage || '—'}</td><td>${p.owner || '—'}</td><td>${p.project_id}</td>
+                    <td>${p.create_at ? p.create_at.slice(5,10) : '—'}</td>
+                    <td>${p.update_at ? p.update_at.slice(5,10) : '—'}</td>
                     <td><button onclick="showProposalForm('${p.id}')">Edit</button></td>
                     <td><button onclick="deleteProposal('${p.id}')" style="color:#f87171">Del</button></td>
                 </tr>`).join('')}
@@ -505,4 +522,157 @@ async function deleteProposal(id) {
         await api('DELETE', '/proposals/' + id);
         loadProposals(currentPage.proposals);
     } catch (e) { alert('Error: ' + e.message); }
+}
+
+// ─── Merge ────────────────────────────────────────────────────────────────────
+
+async function showMergeModal() {
+    document.getElementById('merge-modal').classList.remove('hidden');
+    // Load projects for target dropdown
+    try {
+        const data = await api('GET', '/projects?page_size=200');
+        const sel = document.getElementById('target-project-id');
+        sel.innerHTML = data.items.map(p => `<option value="${p.id}">${p.id} - ${p.name}</option>`).join('');
+    } catch (e) { alert('Error loading projects: ' + e.message); }
+}
+
+function closeMergeModal() {
+    document.getElementById('merge-modal').classList.add('hidden');
+}
+
+async function submitMergeForm(e) {
+    e.preventDefault();
+    const sourceName = document.getElementById('source-project-name').value;
+    const targetId = document.getElementById('target-project-id').value;
+    try {
+        const result = await api('POST', '/proposals/merge-by-project', {
+            source_project_name: sourceName,
+            target_project_id: targetId,
+        });
+        alert('Merge done: ' + (result.message || JSON.stringify(result)));
+        closeMergeModal();
+        loadProposals(currentPage.proposals);
+    } catch (e) { alert('Error: ' + e.message); }
+}
+
+// ─── Duplicate Project Scanner ─────────────────────────────────────────────
+function showDuplicatesModal() {
+    document.getElementById('duplicates-modal').classList.remove('hidden');
+    scanDuplicates();
+}
+
+function closeDuplicatesModal() {
+    document.getElementById('duplicates-modal').classList.add('hidden');
+}
+
+async function scanDuplicates() {
+    const listEl = document.getElementById('duplicates-list');
+    listEl.innerHTML = '<p style="color: #888;">⏳ Scanning...</p>';
+    const caseInsensitive = document.getElementById('dup-case-insensitive').checked;
+    try {
+        const groups = await api('GET', `/projects/duplicates?case_insensitive=${caseInsensitive}`);
+        if (!groups || groups.length === 0) {
+            listEl.innerHTML = '<p style="color: green; padding: 16px;">✓ No duplicate project names found.</p>';
+            return;
+        }
+        listEl.innerHTML = groups.map((g, gi) => renderGroup(g, gi)).join('');
+        // Wire up per-group buttons
+        groups.forEach((g, gi) => {
+            const btn = document.getElementById(`merge-btn-${gi}`);
+            if (btn) btn.onclick = () => mergeGroup(gi, g);
+        });
+    } catch (e) {
+        listEl.innerHTML = `<p style="color: red;">Error: ${escapeHtml(e.message)}</p>`;
+    }
+}
+
+function renderGroup(group, idx) {
+    const rows = group.projects.map(p => `
+        <tr>
+            <td><code>${escapeHtml(p.id)}</code></td>
+            <td>${escapeHtml(p.name)}</td>
+            <td style="font-size: 0.85em; color: #666;">${escapeHtml(p.git_repo || '—')}</td>
+            <td style="text-align: center;">${p.proposal_count}</td>
+            <td style="font-size: 0.85em;">${escapeHtml(p.create_at || '')}</td>
+            <td style="text-align: center;">
+                <input type="radio" name="dup-target-${idx}" value="${escapeHtml(p.id)}" ${p === group.projects[0] ? 'checked' : ''}>
+                <small>target</small>
+            </td>
+            <td style="text-align: center;">
+                <input type="radio" name="dup-source-${idx}" value="${escapeHtml(p.id)}" ${p !== group.projects[0] ? 'checked' : ''}>
+                <small>source</small>
+            </td>
+        </tr>
+    `).join('');
+    return `
+        <div style="border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-bottom: 16px;">
+            <h3 style="margin: 0 0 8px 0;">
+                ${escapeHtml(group.name)}
+                <span style="background: #fee; color: #c33; padding: 2px 8px; border-radius: 12px; font-size: 0.8em;">
+                    ${group.count} duplicates
+                </span>
+            </h3>
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+                <thead>
+                    <tr style="border-bottom: 2px solid #ddd; text-align: left;">
+                        <th>ID</th><th>Name</th><th>Git Repo</th><th style="text-align: center;">Proposals</th><th>Created</th><th>Keep</th><th>Merge from</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+            <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <small style="color: #666;">
+                    <b>Target</b> = canonical project to keep. <b>Source</b> = to absorb &amp; delete.
+                </small>
+                <button id="merge-btn-${idx}" class="primary" style="background: #c33; color: white;">
+                    🔀 Merge source → target
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+async function mergeGroup(idx, group) {
+    const targetEl = document.querySelector(`input[name="dup-target-${idx}"]:checked`);
+    const sourceEl = document.querySelector(`input[name="dup-source-${idx}"]:checked`);
+    if (!targetEl || !sourceEl) {
+        alert('Pick both a target and a source');
+        return;
+    }
+    const targetId = targetEl.value;
+    const sourceId = sourceEl.value;
+    if (targetId === sourceId) {
+        alert('Target and source cannot be the same project');
+        return;
+    }
+    const sourceName = group.projects.find(p => p.id === sourceId)?.name || sourceId;
+    if (!confirm(`Merge "${sourceName}" (${sourceId}) into ${targetId}?\n\n` +
+                 `• All proposals from source will move to target\n` +
+                 `• Source project will be DELETED\n` +
+                 `• This action cannot be undone`)) return;
+    try {
+        const result = await api('POST', '/projects/merge', {
+            target_id: targetId,
+            source_id: sourceId,
+            delete_source: true,
+        });
+        alert(`✓ Merge done!\n\n` +
+              `• Moved ${result.merged_proposals} proposal(s)\n` +
+              `• Source ${result.source_id} deleted: ${result.deleted_source}\n` +
+              `• Audit logged`);
+        await scanDuplicates();
+        loadProjects(1);
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+function escapeHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
