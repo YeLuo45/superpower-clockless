@@ -1,98 +1,126 @@
-# ai-superpower HTTP API Quick Reference
+# ai-superpower Quick Reference — **MCP via mcp_aisp.py (v5.0.0+)**
+
+> 🚫 **DEPRECATED**: This file used to document the v4 REST API (curl). v5.0.0+ uses **MCP** exclusively. The MCP unified CLI `mcp_aisp.py` is the only supported access path for normal operations.
+>
+> For legacy v4 curl examples, see git history. For MCP troubleshooting, see `references/mcp-connection-troubleshooting.md` and `references/mcp-aisp-cli.md`.
+
+---
 
 ## Server Info
 
-- **Actual port: 8001** (not 8000 — 8000 appears in legacy docs but server binds to 8001)
-- Base URL: `http://127.0.0.1:8001/api` (also `http://localhost:8001/api`)
-- Health endpoint: `http://127.0.0.1:8001/health`
-
-## Server Startup
-
-```bash
-ai-superpower run   # 启动 HTTP server — 默认端口 8001
-```
+- **Actual port: 8000** (HTTP mode, default `ai-superpower run`); config.toml `socket_path` is a Unix-socket placeholder, NOT the HTTP port
+- MCP endpoint: `http://127.0.0.1:8000/mcp/` (with trailing slash — 307 redirect if missing)
+- `aisp mcp --transport=stdio` (for agents) talks directly to the same server
+- Verify with: `ss -tlnp | grep 8000`
 
 ## API Key
 
 From `~/.ai-superpower/config.toml`:
 ```toml
 [api]
-key = "dfd37469666776457eb593e3ded692a5"
+key = "<40-hex-char key>"
 ```
 
-## Quick Test
+Or set env var: `AI_SUPERPOWER_API_KEY=<key>` (preferred — `mcp_aisp.py` reads this first).
+
+## Health Check
 
 ```bash
-# 检查 server 状态
-curl -s http://localhost:8001/api/health
-
-# 列出项目
-curl -s http://localhost:8001/api/projects \
-  -H "X-API-Key: dfd37469666776457eb593e3ded692a5"
-
-# 列出提案
-curl -s http://localhost:8001/api/proposals \
-  -H "X-API-Key: dfd37469666776457eb593e3ded692a5"
+ss -tlnp | grep 8000   # confirm server is listening
+mcp_aisp.py --list      # confirm 18 tools are available
 ```
 
-## Create Project
+## Project Operations
 
 ```bash
-curl -s -X POST http://localhost:8001/api/projects \
-  -H "X-API-Key: dfd37469666776457eb593e3ded692a5" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "project-name",
-    "git_repo": "https://github.com/owner/repo",
-    "description": "项目描述"
-  }'
+# List projects
+mcp_aisp.py list-projects --page-size 5
+
+# Search by name
+mcp_aisp.py list-projects --search "ProjectName" --page-size 5
+
+# Create project
+mcp_aisp.py create-project --name "ProjectName" --git-repo "https://github.com/owner/repo"
+
+# Get one project
+mcp_aisp.py get-project --project-id PRJ-20260608-001
+
+# Update project
+mcp_aisp.py update-project --project-id PRJ-... --name "NewName" --description "..."
+
+# Check duplicate
+mcp_aisp.py check-project-duplicate --name "X" --git-repo "https://..."
+
+# Merge duplicates
+mcp_aisp.py merge-projects --target-id PRJ-... --source-id PRJ-... --delete-source true
 ```
 
-## Create Proposal
+## Proposal Operations
 
 ```bash
-curl -s -X POST http://localhost:8001/api/proposals \
-  -H "X-API-Key: dfd37469666776457eb593e3ded692a5" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "提案标题",
-    "owner": "小墨",
-    "project_id": "PRJ-20260524-001",
-    "stage": "proposal",
-    "notes": "备注"
-  }'
+# List proposals (filter by project/status)
+mcp_aisp.py list-proposals --project-id PRJ-... --page-size 10
+mcp_aisp.py list-proposals --status in_dev
+
+# Get one proposal
+mcp_aisp.py get-proposal --proposal-id P-20260608-005
+
+# Create proposal
+mcp_aisp.py create-proposal \
+  --title "ProposalTitle" \
+  --owner "coordinator" \
+  --project-id "PRJ-YYYYMMDD-XXX" \
+  --stage "approved_for_dev" \
+  --prd-confirmation "timeout-approved" \
+  --tech-expectations "timeout-approved" \
+  --notes "mode: unattended | Direction A"
+
+# Update proposal fields (acceptance, notes, prd_path, etc.)
+mcp_aisp.py update-proposal-fields \
+  --proposal-id P-... \
+  --prd-path "/path/to/prd.md" \
+  --tech-solution-path "/path/to/tech.md" \
+  --acceptance "accepted" \
+  --notes "delivered V1426"
+
+# Walk status state machine (one transition at a time)
+mcp_aisp.py update-proposal-status --proposal-id P-... --status clarifying
+mcp_aisp.py update-proposal-status --proposal-id P-... --status prd_pending_confirmation
+mcp_aisp.py update-proposal-status --proposal-id P-... --status approved_for_dev
+mcp_aisp.py update-proposal-status --proposal-id P-... --status in_dev
+mcp_aisp.py update-proposal-status --proposal-id P-... --status in_test_acceptance
+mcp_aisp.py update-proposal-status --proposal-id P-... --status accepted
+
+# Audit / Stats
+mcp_aisp.py get-audit --entity proposal --op create --page-size 10
+mcp_aisp.py get-stats --days 7
+mcp_aisp.py get-sync-config
+mcp_aisp.py export-sync
+mcp_aisp.py get-sync-status
 ```
 
-**注意**：`stage` 值必须是 `VALID_PROPOSAL_STAGES` 中的值：
-- `proposal` (对应状态机的 intake 阶段)
-- `ideation`, `development`, `research`
-- `in_dev`, `in_acceptance`, `accepted`, `delivered`, `active`
-- `approved_for_dev`, `prd_pending_confirmation`
+## Unattended Mode Defaults
 
-`"intake"` 不是合法的 stage 值。
-
-## Update Proposal Status
+For unattended iterations, set these flags on `create-proposal` to **skip both PRD and Tech confirmation gates immediately** (no cron, no boss wait):
 
 ```bash
-curl -s -X PUT http://localhost:8001/api/proposals/P-20260524-001/status \
-  -H "X-API-Key: dfd37469666776457eb593e3ded692a5" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "clarifying"}'
+--prd-confirmation "timeout-approved"   # Skip Step 4 PRD gate
+--tech-expectations "timeout-approved"  # Skip Step 5 Tech gate
+--notes "mode: unattended | Direction A"
 ```
 
-## CLI vs HTTP
+Boss can override in the next session by re-setting either field to `"pending"`.
 
-| 命令 | 传输 | Server 要求 |
-|------|------|-------------|
-| `ai-superpower project list` | Unix socket (`/tmp/ai-superpower.sock`) | 必须 socket 模式 |
-| `curl http://localhost:8000/api/...` | HTTP/TCP | 必须 HTTP 模式 |
+## Why MCP and not curl/urllib
 
-当 server 运行在 HTTP 模式（`ai-superpower run`）而 CLI 报 socket 错误时，直接用 curl 调用 HTTP API 即可。
+- **Auth & lifespan**: MCP server enforces API key validation, request/response schema, and state machine validation
+- **Audit log**: every MCP `tools/call` is logged with JSON-RPC frame (entity, op, payload)
+- **Lock management**: MCP uses file locks around CSV writes — direct curl can race
+- **State machine**: `update-proposal-status` is the ONLY way to transition status; REST/PUT fields silently ignore `status` field
 
-## Sync to proposal-index.md
+## See also
 
-```bash
-ai-superpower sync-to-index
-```
-
-如果 socket 问题导致 CLI 失败，可以用 Python 直接调用 API 获取数据后手动更新 proposal-index.md。
+- `references/mcp-aisp-cli.md` — full unified CLI reference (18 tools, JSON-RPC, exit codes)
+- `references/mcp-connection-troubleshooting.md` — 7 MCP failure modes
+- `references/api-python-urllib-quick-ref.md` — **DEPRECATED**, cron diagnostics only
+- `SKILL.md` — main skill, 11 Steps all use `mcp_aisp.py`

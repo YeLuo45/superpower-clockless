@@ -54,10 +54,10 @@ A platform-agnostic skill for managing proposal lifecycle across multi-role work
 intake → clarifying → prd_pending_confirmation → approved_for_dev
                                                        ↓
               in_test_acceptance ←────────────────────── in_dev
-                   ↓      ↓
-             accepted   test_failed
-                 ↓
-             deployed → delivered
+                   ↑      ↓
+              (re-test)   test_failed   (dev revises, returns to in_dev)
+                              ↓
+                         accepted → deployed → delivered
 ```
 
 - **Strict linear**: 每个箭头必须独立调 `update_proposal_status`，不可跳跃
@@ -121,8 +121,46 @@ For continuous iteration when no user is present. Enabled when requester/boss sp
 **Trigger timing:**
 
 - On delivery: always provide A/B/C/D iteration options, auto-select first
-- PRD/Technical expectation confirmation: auto-approve and continue after 5 min timeout
+- **PRD/Technical expectation confirmation: AUTO-APPROVE IMMEDIATELY (no countdown)**
+  - Set `prd_confirmation: "timeout-approved"` + `tech_expectations: "timeout-approved"` at proposal creation
+  - Skip the 5-minute countdown cron; transition directly to `approved_for_dev`
+  - Only interactive mode uses the cron-based 5-min countdown + boss reply path
 - No clarification questions in unattended mode
+- When in doubt, treat proposal as unattended (boss can override by saying "interactive" or "等待确认")
+
+## Iteration Sizing (boss preference: 5-30 任意)
+
+Boss declares iteration count per session; the coordinator reads it from the most recent boss message and runs that many iterations (or until boss says "停止"/"stop"). Valid range:
+
+
+| Range                | When to use                                                  | Example                 |
+| -------------------- | ------------------------------------------------------------ | ----------------------- |
+| **5 iterations**     | Quick targeted improvements, small feature bundles           | V62 = 5 iterations      |
+| **10-20 iterations** | Standard feature expansion, multiple design systems          | V63 = 20 iterations     |
+| **30 iterations**    | Large multi-week sprints, comprehensive design system fusion | V478-V537 多次 30-iter 完成 |
+
+
+**Rules**:
+
+- Each iteration produces exactly one new P-ID (`P-YYYYMMDD-XXX`)
+- Each iteration has a clear Direction (A/B/C/D) and a 6-design-system fusion rationale
+- Iteration count is read fresh per session — never hard-code a "default" N
+- Boss can interrupt with "停止" (stop) at any time; current proposal finishes, no new one starts
+
+## Communication Style (boss preference)
+
+Boss communicates in **中文 (Chinese)** and prefers **concise, table-based reports**. All coordinator output to boss should follow these rules:
+
+- **Language**: Chinese (中文) by default. Code, file paths, and tool output stay in English (their canonical form).
+- **Format**: Use tables for delivery reports, comparison tables, and summary data. Avoid bullet-only walls of text.
+- **Length**: Concise — summary table + version list + Git chain. No verbose process narration.
+- **End-of-session delivery report must include** (per boss requirement):
+  1. **项目链接** (Project link) — e.g. `https://yeluo45.github.io/prj-proposals-manager/`
+  2. **开发分支 / 部署分支** (Deploy branch) — e.g. `master` (auto-deploys to gh-pages) or `gh-pages` (direct)
+  3. **项目 ID** (Project ID) — e.g. `PRJ-20260422-001`
+  4. **提案 ID** (Proposal ID) — e.g. `P-20260604-004` (one or more if multi-iter)
+
+See `references/delivery-report-template.md` for the full template.
 
 ---
 
@@ -157,6 +195,7 @@ collision risk (legacy data from case-insensitive guards can return 409 even on 
 Use the scan workflow below if the project name looks common.
 
 **Check for existing project first (exact-name match, case-sensitive):**
+
 ```bash
 # 1. Search by name
 mcp_aisp.py list-projects --search "ProjectName" --page-size 5
@@ -172,13 +211,16 @@ mcp_aisp.py scan-duplicate-projects --case-insensitive false   # exact only
 
 **Handle 3 scenarios:**
 
-| Result of `scan-duplicate-projects` | Action |
-|---|---|
-| No duplicates found | Safe to create new project |
-| Duplicates found (case-insensitive) | Present to boss: list each dup with PRJ-ID, ask which one is canonical |
-| Duplicates found (exact) | Reuse existing ID — `create-project` will return `_existing: true` automatically |
+
+| Result of `scan-duplicate-projects` | Action                                                                           |
+| ----------------------------------- | -------------------------------------------------------------------------------- |
+| No duplicates found                 | Safe to create new project                                                       |
+| Duplicates found (case-insensitive) | Present to boss: list each dup with PRJ-ID, ask which one is canonical           |
+| Duplicates found (exact)            | Reuse existing ID — `create-project` will return `_existing: true` automatically |
+
 
 **If boss says "merge X into Y":**
+
 ```bash
 # Step A: backup-first recommendation (audit log is already there, but you can also export)
 mcp_aisp.py get-audit --entity project --since 2026-06-01   # check recent activity
@@ -192,6 +234,7 @@ mcp_aisp.py scan-duplicate-projects                # count should drop by 1
 ```
 
 **Create project via `mcp_aisp.py` (MCP CLI):**
+
 ```bash
 # First-try (no exact match):
 mcp_aisp.py create-project --name "ProjectName" --git-repo "https://github.com/owner/repo"
@@ -202,18 +245,20 @@ mcp_aisp.py create-project --name "ProjectName" --git-repo "..." --force
 # Exact-name hit response (auto-returns existing, no error):
 # {"_existing": true, "id": "PRJ-YYYYMMDD-XXX", "_note": "Returned existing..."}
 ```
-2. Create proposal via `mcp_aisp.py` (ID auto-generated, no manual management)
-3. Create gh-pages branch for the proposal (if project has remote repo):
+
+1. Create proposal via `mcp_aisp.py` (ID auto-generated, no manual management)
+2. Create gh-pages branch for the proposal (if project has remote repo):
   ```bash
   cd $DEV_PROPOSALS/<project-name>
   git checkout -b gh-pages
   ```
-4. Copy `$TEMPLATES_DIR/request-intake-template.md` to proposal directory
-5. Fill in basic info and original request
-6. Create proposal via `mcp_aisp.py`:
+3. Copy `$TEMPLATES_DIR/request-intake-template.md` to proposal directory
+4. Fill in basic info and original request
+5. Create proposal via `mcp_aisp.py` (default owner = `小墨` per the coordinator role in SOUL.md):
   ```bash
-  mcp_aisp.py create-proposal --title "ProposalTitle" --owner "coordinator" --project-id "PRJ-YYYYMMDD-XXX" --stage "approved_for_dev"
+  mcp_aisp.py create-proposal --title "ProposalTitle" --owner "小墨" --project-id "PRJ-YYYYMMDD-XXX" --stage "approved_for_dev"
   ```
+  > **Note on `--owner`**: the v5.0.0 default is the local coordinator agent identity. The literal string `"coordinator"` is the ROLE NAME, not the owner value. Pass the actual coordinator handle (e.g. `小墨`) so the audit log and proposal-index.md correctly attribute the proposal.
 
 ### Step 2: Clarify Requirements
 
@@ -237,6 +282,7 @@ If the request is just an idea or rough draft, transfer to PM role to generate P
   ```
 
 **PM PRD UI styling** (for stakeholders who view PRD as rendered UI):
+
 - Apply [YeLuo45/taste-skill](https://github.com/YeLuo45/taste-skill) skills: `minimist-ui` (editorial typography), `output-skill` (no truncation), `brandkit` (project portfolio consistency)
 - Full patterns + anti-patterns: `references/pm-prd-ui-taste-skill.md`
 
@@ -245,7 +291,7 @@ If the request is just an idea or rough draft, transfer to PM role to generate P
 After PM returns PRD:
 
 1. Present PRD to requester and request confirmation
-2. Start confirmation countdown (recommend: 5 minutes)
+2. Start confirmation countdown (recommend: 5 minutes) — **skip in unattended mode**
 3. Record countdown reference in "PRD Confirmation Countdown ID"
 
 If confirmed: set PRD Confirmation to `confirmed`, cancel countdown, immediately transition to `approved_for_dev` and start development.
@@ -256,25 +302,60 @@ mcp_aisp.py update-proposal-status --proposal-id P-YYYYMMDD-XXX --status approve
 
 If timeout: set PRD Confirmation to `timeout-approved`, record in "Timeout Resolution", immediately transition to `approved_for_dev` and start development.
 
+#### ⚡ In Unattended Mode (Step 4)
+
+**No countdown, no cron, no waiting.** PRD is treated as approved at creation:
+
+1. At `create-proposal` time, set `--prd-confirmation timeout-approved` (or via fields update immediately after create)
+2. Skip the cron-based 5-min countdown entirely
+3. Transition directly to `approved_for_dev`:
+  ```bash
+   mcp_aisp.py update-proposal-status --proposal-id P-YYYYMMDD-XXX --status approved_for_dev
+  ```
+4. Record the auto-approval reason in `notes`: `mode: unattended | PRD auto-approved at intake`
+5. Boss can override by re-setting `prd_confirmation="pending"` in the next session — the proposal re-enters confirmation mode
+
+**Why this is safe**: the unattended mode is opt-in (boss declared intent). All proposals under an unattended project inherit the same assumption. If boss later wants interactive confirmation for a specific proposal, they reset the field.
+
 ### Step 5: Technical Expectations Gate
 
 Before outputting technical solution:
 
 1. Understand from requester: tech stack, performance, cost, deployment method, maintainability, dependency constraints
-2. Up to 3 rounds of questions
-3. Start confirmation countdown (same mechanism as Step 4)
+2. Up to 3 rounds of questions — **skip in unattended mode**
+3. Start confirmation countdown (same mechanism as Step 4) — **skip in unattended mode**
 4. Record in "Technical Expectations Countdown ID"
 
 If confirmed: set Technical Expectations to `confirmed`, write technical solution and transition to `approved_for_dev`.
 
 If timeout: set Technical Expectations to `timeout-approved`, proceed with current assumptions, write technical solution and transition to `approved_for_dev`.
 
-**⚠️ Timeout cron firing on proposal with missing index entry:** If the cron job fires but `proposal-index.md` has no entry for that proposal (yet ai-superpower CSV has the proposal — verify via `list_proposals` MCP tool or `grep -n "P-YYYYMMDD-XXX" /home/hermes/proposals/proposals.csv`), do NOT manually edit the index. Follow the recovery path in `references/proposal-index-missing-entry.md`:
+#### ⚡ In Unattended Mode (Step 5)
 
-1. Verify the proposal exists in ai-superpower via `aisp proposal get P-YYYYMMDD-XXX` (or `get_proposal` MCP tool)
-2. Run `sync-proposals-to-website.py` to reconcile the index
+**No clarifying questions, no countdown, no boss wait.** Tech expectations are auto-filled from project defaults:
+
+1. At `create-proposal` time, set `--tech-expectations timeout-approved` (inheriting from PRJ-level default or last iteration's tech stack)
+2. Skip the 3 rounds of clarifying questions
+3. Skip the 5-min countdown
+4. Proceed directly to Step 6 (Technical Solution) with assumptions:
+  - Tech stack: inherit from project root config (e.g. React + Vite + TypeScript) or last proposal
+  - Performance: inherit PRJ's perf budget (e.g. < 200KB JS bundle, < 100ms TTI)
+  - Cost: zero-dependency addition policy (no new npm packages without explicit approval)
+  - Deployment: same as project's last deployed URL
+5. Write tech solution using these assumptions, mark with `mode: unattended` in notes
+6. Transition to `approved_for_dev`:
+  ```bash
+   mcp_aisp.py update-proposal-status --proposal-id P-YYYYMMDD-XXX --status approved_for_dev
+  ```
+
+**Boss can override** at any point: re-set `tech_expectations="pending"`, the proposal re-enters the interactive flow.
+
+**⚠️ Timeout cron firing on proposal with missing index entry:** If the cron job fires but `proposal-index.md` has no entry for that proposal (yet ai-superpower CSV has the proposal — verify via `mcp_aisp.py get-proposal --proposal-id P-YYYYMMDD-XXX` or `grep -n "P-YYYYMMDD-XXX" /home/hermes/proposals/proposals.csv`), do NOT manually edit the index. Follow the recovery path in `references/proposal-index-missing-entry.md`:
+
+1. Verify the proposal exists in ai-superpower via `mcp_aisp.py get-proposal --proposal-id P-YYYYMMDD-XXX`
+2. Run `mcp_aisp.py get-sync-status` to check index sync, or `sync-proposals-to-website.py` to force reconcile
 3. Only after the entry appears in the index should you attempt field updates
-4. The correct status transition is still done via ai-superpower API — the index is derived, not the source of truth
+4. The correct status transition is still done via `mcp_aisp.py update-proposal-status` — the index is derived, not the source of truth
 
 ### Step 6: Technical Solution
 
@@ -285,17 +366,40 @@ If timeout: set Technical Expectations to `timeout-approved`, proceed with curre
   mcp_aisp.py update-proposal-fields --proposal-id P-YYYYMMDD-XXX --tech-solution-path "$superpower-root/P-YYYYMMDD-XXX-tech-solution.md"
   ```
 
-### Step 6b: TDD Test Case Generation
+### Step 6b: TDD Test Case Generation (spec-kit TDD layer)
 
-After technical solution output, transfer to Test Expert to generate test cases based on TDD principles:
+After technical solution output, transfer to Test Expert to generate TDD test cases using **spec-kit methodology** ([https://github.com/YeLuo45/spec-kit](https://github.com/YeLuo45/spec-kit)):
 
 1. Coordinator hands off to Test Expert with: PRD doc, technical solution doc, project background
-2. Test Expert outputs to `$superpower-test/<project-name>/YYYY-MM-DD-test-cases.md`
-  - Test cases must be traceable to PRD requirements
-  - Include: test case ID, description, preconditions, steps, expected results
-  - Cover normal paths and edge cases
-  - Copy to `$superpower-dev/<project-name>/proposals/docs/test-cases.v1.md`
-3. Test cases delivered to Dev (status stays in `approved_for_dev` per v5 state machine; no `in_tdd_test` state exists)
+2. Generate TDD artifacts via `scripts/generate-tdd-spec.py`:
+  ```bash
+   # Default (Step 6b only): test-cases.md + checklist.md + Step 8 templates
+   python3 scripts/generate-tdd-spec.py <PRJ-ID>
+
+   # Full mode (Steps 5/6/6b): also generate spec-kit/{spec,plan,tasks}.md
+   python3 scripts/generate-tdd-spec.py <PRJ-ID> --full
+   python3 scripts/generate-tdd-spec.py <PRJ-ID> --full --dry-run   # preview
+  ```
+3. Output structure (in `workspace-test/<project>/proposals/<PRJ-ID>/`):
+  ```
+   ├── test-cases.md           # Structured TDD test cases (ID, US, Type, Pre, Steps, Exp, GHERKIN)
+   ├── checklist.md            # "Unit tests for English" — req quality validation
+   ├── test-report.md          # Step 8 template (Test Expert fills in)
+   ├── checklist-status.md     # Step 8 pass/fail per CHK item template
+   └── spec-kit/               # --full mode only
+       ├── spec.md             # User stories with Given/When/Then + Independent Test
+       ├── plan.md             # Tech plan with **Testing** field + tests/{contract,integration,unit}/
+       └── tasks.md            # Phase-organized tasks with TDD tests-first subsections
+  ```
+4. **TDD methodology** (per spec-kit):
+  - User stories in spec.md MUST have: priority (P1/P2/P3) + Independent Test + Given/When/Then scenarios
+  - tasks.md enforces "Tests for User Story N" subsection BEFORE "Implementation for User Story N"
+  - plan.md's `**Testing`** field is MANDATORY (skill requires TDD)
+  - Constitution Check enforces: TDD discipline, ≥80% coverage, independent testability
+5. Test cases are traceable to PRD requirements (`Source: spec.md §USx` in each TC-)
+6. Status stays in `approved_for_dev` during Step 6b (no `in_tdd_test` state in v5)
+
+**Full schema reference**: see `references/spec-kit-integration.md`
 
 ### Step 7: Handoff to Dev
 
@@ -308,29 +412,35 @@ After technical solution output, transfer to Test Expert to generate test cases 
   mcp_aisp.py update-proposal-fields --proposal-id P-YYYYMMDD-XXX --project-path "$DEV_PROPOSALS/<project-name>"
   ```
 - If directory doesn't exist, Dev creates `$DEV_PROPOSALS/<project-name>/docs/`
+- Dev uses `workspace-test/<project>/proposals/<PRJ>/spec-kit/tasks.md` (TDD-first) for task ordering
 
-### Step 8: Test Expert Acceptance (Based on TDD)
+### Step 8: Test Expert Acceptance (TDD-based via spec-kit)
 
-After Dev reports completion, Test Expert performs acceptance based on test cases:
+After Dev reports completion, Test Expert performs acceptance using **spec-kit's TDD test cases** (not ad-hoc):
 
 Requirements consistency:
 
-- Matches requester-confirmed requirements
-- Aligned with PRD
-- No scope creep or cutting corners
+- Matches requester-confirmed requirements (from `spec.md` User Stories)
+- Aligned with PRD (each TC- has `Source: spec.md §USx` traceability)
+- No scope creep or cutting corners (Constitution Check items)
 
-Test case execution:
+Test case execution (run actual code, not just screenshots):
 
-- Execute each test case in `test-cases.vN.md`
-- Record pass/fail status for each
-- Record any deviations or failures
+- Execute each test case in `workspace-test/<project>/proposals/<PRJ>/test-cases.md`
+- Record pass/fail status in JSON, then render report:
+  ```bash
+  # After running tests, save results to JSON and render report
+  python3 scripts/generate-tdd-spec.py <PRJ-ID> --report results.json
+  ```
+- This updates `test-report.md` (verdict, pass rate, failure analysis) and `checklist-status.md`
 
-Functional verification (must实际操作, not just screenshots):
+Functional verification (must be 实际操作, not just screenshots):
 
 - Core features work end-to-end
 - Console/logs have no Error (warnings acceptable)
 - Existing features not broken
 - Build succeeds
+- Test coverage ≥ 80% (per Constitution Check II)
 
 Transition status to `in_test_acceptance` during acceptance:
 
@@ -338,7 +448,7 @@ Transition status to `in_test_acceptance` during acceptance:
 mcp_aisp.py update-proposal-status --proposal-id P-YYYYMMDD-XXX --status in_test_acceptance
 ```
 
-If all test cases pass: proceed to Step 9 (delivery)
+If all test cases pass: proceed to Step 9 (delivery → OpenSpec post-acceptance generation)
 
 If any test case fails: transition to `test_failed`, output structured revision feedback:
 
@@ -368,6 +478,18 @@ If confirmed: set Research Direction to `confirmed`, immediately transfer to PM 
 
 If timeout: set Research Direction to `timeout-approved`, Coordinator decides independently, immediately transfer to PM for next iteration PRD.
 
+#### ⚡ In Unattended Mode (Step 10)
+
+**No countdown, no cron, no boss wait.** Research direction is auto-selected from the **last 3-iteration pattern**:
+
+1. Read the most recent 3 accepted proposals via `mcp_aisp.py list-proposals --status accepted --page-size 3`
+2. Detect the dominant direction (A/B/C/D) — usually Direction A (the first option) by default
+3. Skip the "explore next iteration or maintain" question
+4. Set `prd_confirmation="timeout-approved"` + `tech_expectations="timeout-approved"` on the next proposal (re-uses the Step 4/5 skip pattern)
+5. Continue the iteration loop with `mode: unattended` in notes
+
+**Boss override**: re-set the proposal's `prd_confirmation="pending"` to re-enter interactive planning.
+
 ### Step 11: Deployment (Post-Acceptance Delivery)
 
 After acceptance passes (status becomes `accepted`):
@@ -382,6 +504,26 @@ After acceptance passes (status becomes `accepted`):
   mcp_aisp.py update-proposal-fields --proposal-id P-YYYYMMDD-XXX --deployment-url "https://..."
   mcp_aisp.py update-proposal-status --proposal-id P-YYYYMMDD-XXX --status deployed
   ```
+
+#### ⚡ In Unattended Mode (Step 11)
+
+**No boss confirmation, no manual trigger.** Deployment is auto-executed and auto-recorded:
+
+1. Skip the "deploy now or wait" question — deploy immediately after acceptance
+2. Detect deployment target automatically:
+  - If project has `gh-pages` branch configured: `git push origin master` (workflow auto-deploys)
+  - If project is a static site (no build step): direct push to `gh-pages`
+  - If project is a server-side app: skip deployment, just record the artifact URL
+3. Capture the deployment URL from workflow output / GitHub Pages
+4. Update proposal via `mcp_aisp.py update-proposal-fields --proposal-id P-... --deployment-url "..."`
+5. Transition to `deployed` and then to `delivered`:
+  ```bash
+   mcp_aisp.py update-proposal-status --proposal-id P-... --status deployed
+   mcp_aisp.py update-proposal-status --proposal-id P-... --status delivered
+  ```
+6. Generate the end-of-iteration **delivery report** (see `references/delivery-report-template.md`) — the report must contain 项目链接 / 部署分支 / 项目ID / 提案ID
+
+**Boss override**: pause the cron job to halt further unattended deployments, or set the proposal's `acceptance="hold"` to skip Step 11 in the current iteration.
 
 ---
 
@@ -402,10 +544,10 @@ For one-off smoke tests or legacy code, the underlying REST API is still availab
 The ai-superpower API has TWO separate fields that look similar but mean different things:
 
 
-| Field    | Purpose                                                   | Example valid values                                                                                                                                                                                                | When set                                                           |
-| -------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `stage`  | Lifecycle stage (less granular, defaults at create)       | `"proposal"`, `"in_dev"`, `"development"`, `"research"`, `"ideation"`, `"active"`, `"accepted"`, `"delivered"`, `"approved_for_dev"`, `"prd_pending_confirmation"`, `"in_acceptance"`                               | At creation AND via fields update                                  |
-| `status` | State machine status (more granular, transition-enforced) | `"intake"`, `"clarifying"`, `"prd_pending_confirmation"`, `"approved_for_dev"`, `"in_dev"`, `"in_test_acceptance"`, `"test_failed"`, `"accepted"`, `"deployed"`, `"delivered"` | ONLY via `update-proposal-status` (state machine enforced) |
+| Field    | Purpose                                                   | Example valid values                                                                                                                                                                  | When set                                                   |
+| -------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `stage`  | Lifecycle stage (less granular, defaults at create)       | `"proposal"`, `"in_dev"`, `"development"`, `"research"`, `"ideation"`, `"active"`, `"accepted"`, `"delivered"`, `"approved_for_dev"`, `"prd_pending_confirmation"`, `"in_acceptance"` | At creation AND via fields update                          |
+| `status` | State machine status (more granular, transition-enforced) | `"intake"`, `"clarifying"`, `"prd_pending_confirmation"`, `"approved_for_dev"`, `"in_dev"`, `"in_test_acceptance"`, `"test_failed"`, `"accepted"`, `"deployed"`, `"delivered"`        | ONLY via `update-proposal-status` (state machine enforced) |
 
 
 **⚠️ CRITICAL pitfall (validated 2026-06-03)**: `intake` is a valid `status` value but is NOT a valid `stage` value at creation. `mcp_aisp.py create-proposal --stage intake` returns "Invalid stage: intake".
@@ -445,7 +587,7 @@ mcp_aisp.py list-proposals --project-id PRJ-... --status in_dev
 mcp_aisp.py get-proposal --proposal-id P-20260608-005
 mcp_aisp.py create-proposal \
   --title "My proposal" \
-  --owner "coordinator" \
+  --owner "小墨" \
   --project-id PRJ-20260608-001 \
   --stage approved_for_dev
 mcp_aisp.py update-proposal-fields \
@@ -468,16 +610,24 @@ mcp_aisp.py export-sync
 mcp_aisp.py get-sync-status
 ```
 
-### Legacy REST API (curl/urllib) — Only for Smoke Tests
+### ⚠️ Emergency: REST API (curl/urllib) — Only When MCP Server Is Down
 
-> **⚠️ The REST API is still available for one-off smoke tests and emergency debugging, but new code should use `mcp_aisp.py`.** Direct `urllib`/`curl` access bypasses MCP's auth/lifespan management and state machine validation.
+> **🚫 REST is NOT the default access path.** All normal operations go through `mcp_aisp.py` (MCP). Use REST **only** when the MCP server is unreachable AND the operation is critical AND the boss has explicitly approved the bypass. For all other cases, restore MCP connectivity and use `mcp_aisp.py`.
+
+**Why MCP is mandatory**:
+
+- MCP enforces auth, lifespan, lock management, and state machine validation
+- Direct `urllib`/`curl` access bypasses all of these
+- The audit log is built from MCP `tools/call` JSON-RPC frames — REST calls are not audited
+
+**When MCP is down**, the recovery steps in `references/mcp-connection-troubleshooting.md` apply. If those fail AND the operation is time-critical, REST can be used as a last resort:
 
 ```bash
 # Port discovery — try 8000, then 8001 (config.toml may be stale)
 curl -s --max-time 3 "http://127.0.0.1:8000/api/health" || \
   curl -s --max-time 3 "http://127.0.0.1:8001/api/health"
 
-# Direct REST call (requires X-API-Key header)
+# Direct REST call (requires X-API-Key header) — EMERGENCY ONLY
 curl -X PUT "http://127.0.0.1:8000/api/proposals/P-.../status" \
   -H "X-API-Key: $AI_SUPERPOWER_API_KEY" \
   -H "Content-Type: application/json" \
@@ -578,7 +728,7 @@ bash scripts/backup_proposals.sh
 > - Path is `/api/{entity}`, NOT `/api/v1/{entity}` (the v1 prefix does NOT exist)
 > - `page_size` max is 200 — passing 1000 returns HTTP 422
 > - Paginate with `page=1`, `page=2`, ... until `len(items) >= total`
-> - **Status transition `intake → accepted`**: The state machine does NOT allow direct transition from `intake` to `accepted`. Must go through: `intake → clarifying → prd_pending_confirmation → approved_for_dev → in_dev → in_test_acceptance → accepted`. In unattended mode, use `PUT /api/proposals/{id}/fields` to set `acceptance` directly — bypassing status machine for acceptance field only.
+> - **Status transition `intake → accepted`**: The state machine does NOT allow direct transition from `intake` to `accepted`. Must go through: `intake → clarifying → prd_pending_confirmation → approved_for_dev → in_dev → in_test_acceptance → accepted`. In unattended mode, set `prd_confirmation="timeout-approved"` and `tech_expectations="timeout-approved"` at `create-proposal` time so the proposal starts past those gates. To set the final `acceptance` field after the state machine walk completes, use `mcp_aisp.py update-proposal-fields --proposal-id P-... --acceptance "accepted"` — this writes the acceptance field separately from the status state machine (which is the correct way to mark "delivered but not state-machined").
 > - **Ghost proposals**: If a proposal was created via CSV but never existed in the API database, calling `PUT /api/proposals/{id}/fields` returns `{"detail":"Proposal not found"}`. The API auto-assigns a new ID on creation. Always verify existence before update — if ghost, create new via POST and update the new ID.
 
 Backups stored at: `superpower-backups/backup_YYYYMMDD_HHMMSS/`
@@ -688,7 +838,7 @@ Test case files (filenames containing `test`, `spec`, `test-case` in .md files) 
 
 ### Post-Acceptance: Generate OpenSpec SPEC
 
-After proposal acceptance, generate OpenSpec spec files based on PRD and technical solution:
+After proposal acceptance (status `accepted` or `delivered`), generate OpenSpec spec files based on PRD and technical solution:
 
 ```bash
 python3 scripts/generate-spec.py <project_id> [--dry-run]
@@ -698,20 +848,24 @@ python3 scripts/generate-spec.py PRJ-20260422-001          # generate SPEC for a
 python3 scripts/generate-spec.py PRJ-20260516-001 --dry-run  # preview only
 ```
 
-Reads PRD and technical solution from `workspace-pm/proposals/{project_id}/`, generates:
+Files from: `workspace-pm/proposals/{project_id}/` → PRD + tech-solution
+Output structure (matches real OpenSpec repo at `https://github.com/YeLuo45/OpenSpec`):
 
 ```
-workspace-dev/proposals/{project_name}/SPEC/
-├── proposal.md        # Why/What/Capabilities/Impact (from PRD)
-├── spec.md           # Requirements + GHERKIN scenarios
-├── design.md         # Context/Goals/Decisions/Risks (from technical solution)
-├── tasks.md          # Implementation checklist
-└── .openspec.yaml    # Metadata (schema, project, creation date)
+workspace-dev/proposals/{project_name}/openspec/changes/{YYYY-MM-DD}-{slug}/
+├── .openspec.yaml             # schema: spec-driven, created: YYYY-MM-DD, proposal: PRJ-...
+├── proposal.md                # Why / What Changes / Capabilities (New + Modified) / Impact
+├── design.md                  # Context / Goals+Non-Goals / Decisions / Risks+Trade-offs
+├── tasks.md                   # ## N. <Group> / - [ ] N.M <task>
+└── specs/
+    └── <capability-name>/
+        └── spec.md            # ## ADDED Requirements / ### Requirement: <name>
+                               #   #### Scenario: <name> / - **WHEN** / - **THEN**
 ```
 
-OpenSpec reference: [https://github.com/YeLuo45/OpenSpec（schemas/spec-driven/templates/）](https://github.com/YeLuo45/OpenSpec（schemas/spec-driven/templates/）)
+For the OpenSpec project itself, output is at `workspace-dev/proposals/openspec/openspec/changes/{change}/` (one less level).
 
-### Initialize SPEC for Existing Projects
+**Schema reference**: see `references/openspec-integration.md` for full format details, `.openspec.yaml` schema, capability naming rules, and critical pitfalls (e.g. 4-hashtag `#### Scenario` requirement).
 
 Initialize OpenSpec SPEC for projects without proposals (legacy projects) from existing project files:
 
@@ -746,8 +900,8 @@ Read sources:
 | Concurrent writes                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | FastAPI + file lock ensures data consistency                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | ID range conflicts                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | API allocates per-project, isolated conflicts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | Data loss                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Audit log supports replay recovery                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Cron job fires but proposal not in proposal-index.md                                                                                                                                                                                                                                                                                                                                                                                                                                 | This is expected if the proposal was never written to the index. Index is derived from ai-superpower CSV (via `aisp sync-to-index`), not the authoritative source. Practical fix: (1) verify proposal exists in ai-superpower via `aisp proposal get P-YYYYMMDD-XXX` or `get_proposal` MCP tool, (2) if all target fields already correct in CSV, task is done — report [DONE]. See `references/cron-timeout-proposal-index-missing.md` for the full diagnosis flow and conclusion protocol.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| ai-superpower CSV has correct values but cron says to update index                                                                                                                                                                                                                                                                                                                                                                                                                   | ai-superpower proposals.csv is the data source (via MCP `get_proposal`). If a cron fires to "update proposal-index.md" but the CSV already contains the correct values (verified by reading lines around the ID or via MCP), the task is already done — skip all API/index operations. The index will regenerate on next `aisp sync-to-index`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Cron job fires but proposal not in proposal-index.md                                                                                                                                                                                                                                                                                                                                                                                                                                 | This is expected if the proposal was never written to the index. Index is derived from ai-superpower CSV (via `mcp_aisp.py get-sync-status` / `sync-proposals-to-website.py`), not the authoritative source. Practical fix: (1) verify proposal exists in ai-superpower via `mcp_aisp.py get-proposal --proposal-id P-YYYYMMDD-XXX`, (2) if all target fields already correct in CSV, task is done — report [DONE]. See `references/cron-timeout-proposal-index-missing.md` for the full diagnosis flow and conclusion protocol.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ai-superpower CSV has correct values but cron says to update index                                                                                                                                                                                                                                                                                                                                                                                                                   | ai-superpower proposals.csv is the data source (via `mcp_aisp.py get-proposal`). If a cron fires to "update proposal-index.md" but the CSV already contains the correct values (verified by reading lines around the ID or via `mcp_aisp.py get-proposal`), the task is already done — skip all API/index operations. The index will regenerate on next sync.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | Cron job asks to update proposal-index.md directly with field changes                                                                                                                                                                                                                                                                                                                                                                                                                | **Always wrong** — the index is derived from ai-superpower CSV. When a cron fires with instructions to change specific fields (e.g., "Technical Expectations: pending → timeout-approved"), first read the CSV around the proposal ID or use `get_proposal` MCP. If all target values are already correct, the task is done at the data layer — report `[DONE]` and make no API calls and no index edits. The index regenerates automatically on next sync.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `Recurring cron re-fires on the same proposal with the same [DONE] answer`                                                                                                                                                                                                                                                                                                                                                                                                           | If a cron like `P-YYYYMMDD-XXX-tech-confirm` re-fires (2nd, 3rd time) and the data layer is still already correct, the correct output is still `[DONE]` — never escalate to manual index editing. If a cron re-fires more than 3 times on the same proposal, the cron job itself is likely misconfigured (e.g., one-shot cron scheduled as recurring `*/5 * * * *` instead of a one-shot timestamp, or auto-approval never cleared the state)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ai-superpower API returns 404 but proposals.csv has correct data                                                                                                                                                                                                                                                                                                                                                                                                                     | Proposal is orphaned in API but CSV has all correct fields. Do NOT POST replacement (orphans original ID). Conclude data-layer task complete — report [DONE]. The index will sync later. See `references/api-404-csv-valid.md`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -772,7 +926,7 @@ Read sources:
 | proposals.csv line count mismatch | proposals.csv may have far fewer lines than total API proposals (e.g., 32 CSV lines vs 270 API proposals). proposals.csv is a derived backup, not the authoritative data. Always use the API for reads and writes. |
 | `~/.superpower-clockless/env` does not exist | The skill says `source ~/.superpower-clockless/env` but this file is not created by the install script. The actual env is in `~/.ai-superpower/config.toml` (section `[api]`, keys `key` and `socket_path`). Read directly from there for the API key and port — do not try to source a non-existent env file. |
 | superpower-clockless MCP invocation | `superpower-clockless mcp-info` lists tools (e.g. `proposal_get`, `proposal_update_fields`) but `superpower-clockless mcp proposal_get <id>` is NOT valid — the CLI has no pass-through subcommands for MCP tools. Workaround: invoke via Python urllib directly (see `references/superpower-clockless-mcp-invocation.md`). The MCP server runs as a sidecar; `superpower-clockless mcp` alone just shows help text. |
-| `aisp proposal get/list/update` fails with `FileNotFoundError` in HTTP mode | `aisp` CLI's `client.py:25` hardcodes `socket.AF_UNIX` and calls `sock.connect(self.socket_path)` regardless of what `socket_path` contains. When `~/.ai-superpower/config.toml` has `socket_path = "127.0.0.1:8001"` (a TCP-style address used as if it were a Unix socket path) but the server is actually running in HTTP mode on port 8000, the CLI fails with `FileNotFoundError: [Errno 2] No such file or directory` — even though `curl http://127.0.0.1:8000/api/proposals/P-...` works fine with the X-API-Key. The CLI cannot reach an HTTP-mode server at all. **Workaround for cron/agent reads** (the skill's "no curl/urllib" rule is relaxed for cron diagnostic scripts — see `scripts/check-proposal-cron-state.py`): write a small Python script that reads the key from `~/.ai-superpower/config.toml` and uses `urllib.request` against `http://127.0.0.1:8000/api/...`. **Workaround for normal agent work**: use the MCP tools (`aisp mcp --transport=stdio` or the Streamable HTTP endpoint) — they talk HTTP correctly. **Diagnostic**: `ss -tlnp \| grep 8000` confirms the server is up; `aisp proposal get` traceback will show `client.py:25` and `sock.connect(self.socket_path)` — that is the AF_UNIX bug signature, not a server outage. |
+| `mcp_aisp.py <tool>` fails with `FileNotFoundError` or connection error | `mcp_aisp.py` spawns `aisp mcp --transport=stdio` as a subprocess. If the `aisp` binary is missing or `~/.ai-superpower/config.toml` points to a wrong socket path, the subprocess fails to start. The root cause is `aisp`'s `client.py:25` hardcodes `socket.AF_UNIX` and calls `sock.connect(self.socket_path)` regardless of what `socket_path` contains — when `config.toml` has `socket_path = "127.0.0.1:8001"` (a TCP-style address used as if it were a Unix socket path) but the server is actually running in HTTP mode on port 8000, the subprocess fails with `FileNotFoundError: [Errno 2] No such file or directory`. **Workaround for `mcp_aisp.py`**: set `MCP_AISP_BIN=/path/to/aisp` to override binary location, or check `references/mcp-connection-troubleshooting.md` for 7 common failure modes. **Diagnostic**: `ss -tlnp \| grep 8000` confirms the server is up; traceback mentioning `client.py:25` and `sock.connect(self.socket_path)` is the AF_UNIX bug signature, not a server outage. **Last resort**: if both `mcp_aisp.py` and the MCP server are broken, the cron diagnostic pattern in `scripts/check-proposal-cron-state.py` (urllib with config.toml key) is the documented exception. |
 | Ghost proposal outputs [DONE] not [SILENT] | When a cron fires for a non-existent proposal, the correct output is `[DONE] {id} {action} failed — proposal does not exist in system (ghost proposal), no action needed.` — not `[SILENT]`. The former properly closes the task; `[SILENT]` suppresses delivery and leaves the cron outcome ambiguous. |
 | main/gh-pages branch divergence | prj-proposals-manager skill development commits to `gh-pages` (feature/refactor), `main` holds stable releases. When a URL (e.g. `https://raw.githubusercontent.com/{owner}/{repo}/main/bootstrap.sh`) returns 404 but the file exists locally, check `git log --oneline main` vs `git log --oneline gh-pages`. If main is behind, merge gh-pages into main (`git checkout main && git merge gh-pages && git push`). Never let feature branches diverge from main on public URLs referenced in documentation. |
 | API returns 404 but proposals.json has correct data | Proposal is orphaned in API but JSON has all correct fields. Do NOT POST replacement (orphans original ID). Conclude data-layer task complete — report [DONE]. The index will sync later. See `references/api-404-json-valid.md`. |
@@ -784,47 +938,49 @@ Read sources:
 ## References
 
 
-| File                                                        | Purpose                                                                                                                                                                                                                                                                                            |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **🆕 v5.0.0 (2026-06-08)** | |
-| `references/mcp-aisp-cli.md` | **Unified MCP CLI reference** — `mcp_aisp.py` covers all 18 tools, JSON-RPC via stdio, bundle behavior, exit codes, API key resolution, portability. Replaces all `aisp ...` and `urllib` patterns. |
-| `references/pm-prd-ui-taste-skill.md` | **PM PRD UI styling** — apply YeLuo45/taste-skill (minimist-ui + output-skill + brandkit) when generating PRDs that stakeholders view as rendered UI. Includes patterns + anti-patterns + before/after example. |
-| `references/mcp-vs-rest-migration.md`                       | **v4→v5 migration cheat sheet** — data source change, tool mapping, state machine, env var renames, rollback plan                                                                                                                                                                                  |
-| `references/mcp-connection-troubleshooting.md`              | **7 MCP failure modes** with fixes (server down, 307 redirect, lifespan race, auth, vite proxy, CORS, localStorage corruption) + diagnostic script                                                                                                                                                 |
-| `references/cron-misconfigured-recurring-timeout.md`        | **5-step diagnostic recipe** for cron-fire proposals when a one-shot timeout is misconfigured as `*/5 * * `* * recurring. Includes path-correction, CSV-direct read (v5), target-key verification, cron-inspection, and [DONE] response format. P-20260502-017 8802-fire counter-example included. |
-| `references/proposal-index-missing-entry.md`                | Conceptual: diagnosing missing proposal-index.md entries when ai-superpower CSV has the proposal. Verify via `aisp proposal get P-...` (or MCP `get_proposal`), or `grep -n "P-..." /home/hermes/proposals/proposals.csv` directly. Index is derived from CSV, not authoritative.                  |
-| `references/unattended-multi-iteration-state-walk.md`       | 2026-06-04 pattern: how to run N continuous unattended iterations — status state machine walking (`intake → ... → accepted`), `prd_confirmation=timeout-approved` to skip gates, `stage` vs `status` field discipline, 9-iteration Round 7 ai-novel-assistant worked example                       |
-| `references/ghost-proposal-functional-descendant.md`        | Ghost proposal recovery when API returns 404 but functional descendant exists — state machine stepping for descendant updates                                                                                                                                                                      |
-| `references/ghost-proposal-p-20260502-017.md`               | Session log: P-20260502-017 ghost proposal (May 27 — proposal only in backup JSON, not live JSON)                                                                                                                                                                                                  |
-| `references/ghost-proposal-p-20260502-017-v2.md`            | Session log: P-20260502-017 second cron (June 4 — proposal in live JSON but orphaned from API, API 404)                                                                                                                                                                                            |
-| `references/ghost-proposal-p-20260502-017-v3.md`            | Session log: P-20260502-017 third cron (June 9 — same ghost state, **cron-mode auto-pause applied**: `hermes cron pause 3820fdafad55` to stop 9807-fire spam; first validation of the "Cron-Mode Remediation" path)                                                                                |
-| `references/cron-proposal-sync-failures.md`                 | Cron fires for non-existent proposals — diagnosis & handling                                                                                                                                                                                                                                       |
-| `references/cron-timeout-proposal-index-missing.md`         | Cron timeout fires but proposal already correct in ai-superpower CSV — skip API/index, task is done at data layer                                                                                                                                                                                  |
-| `references/cron-timeout-proposals-json-already-correct.md` | **v4 session log** (now superseded — v5 uses CSV): P-20260502-017 cron fired, all fields already correct in proposals.json — diagnostic sequence and key rule. See `mcp-vs-rest-migration.md` § 5 for v5 verification commands.                                                                    |
-| `references/ai-superpower-architecture.md`                  | Anti-tamper architecture & how ai-superpower works                                                                                                                                                                                                                                                 |
-| `references/superpower-clockless-mcp-invocation.md`         | superpower-clockless MCP tool pass-through workaround — `mcp-info` lists tools but CLI has no subcommand passthrough; use Python urllib instead                                                                                                                                                    |
-| `references/ai-superpower-cli-quirks.md`                    | CLI argument rules (e.g. git_repo must be https://)                                                                                                                                                                                                                                                |
-| `references/api-quick-ref.md`                               | HTTP API quick reference (curl commands)                                                                                                                                                                                                                                                           |
-| `references/api-python-urllib-quick-ref.md`                 | Python urllib patterns for ai-superpower API (preferred over curl)                                                                                                                                                                                                                                 |
-| `references/data-recovery.md`                               | Data recovery methods (via audit log)                                                                                                                                                                                                                                                              |
-| `references/local-path-population.md`                       | Local path population logic                                                                                                                                                                                                                                                                        |
-| `references/github-repo-rename.md`                          | GitHub repo rename handling                                                                                                                                                                                                                                                                        |
-| `references/merge-proposals-dirs.md`                        | Merging proposal directories                                                                                                                                                                                                                                                                       |
-| `references/openspec-integration.md`                        | OpenSpec integration                                                                                                                                                                                                                                                                               |
-| `references/vite-cache-issue.md`                            | Vite cache issue handling                                                                                                                                                                                                                                                                          |
-| `references/favorites-system.md`                            | Favorites system architecture                                                                                                                                                                                                                                                                      |
-| `references/bash-pitfalls.md`                               | Common shell script pitfalls                                                                                                                                                                                                                                                                       |
+| File                                                        | Purpose                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **🆕 v5.0.0 (2026-06-08)**                                  |                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `references/mcp-aisp-cli.md`                                | **Unified MCP CLI reference** — `mcp_aisp.py` covers all 18 tools, JSON-RPC via stdio, bundle behavior, exit codes, API key resolution, portability. Replaces all `aisp ...` and `urllib` patterns.                                                                                                                                                                                               |
+| `references/pm-prd-ui-taste-skill.md`                       | **PM PRD UI styling** — apply YeLuo45/taste-skill (minimist-ui + output-skill + brandkit) when generating PRDs that stakeholders view as rendered UI. Includes patterns + anti-patterns + before/after example.                                                                                                                                                                                   |
+| `references/mcp-vs-rest-migration.md`                       | **v4→v5 migration cheat sheet** — data source change, tool mapping, state machine, env var renames, rollback plan                                                                                                                                                                                                                                                                                 |
+| `references/mcp-connection-troubleshooting.md`              | **7 MCP failure modes** with fixes (server down, 307 redirect, lifespan race, auth, vite proxy, CORS, localStorage corruption) + diagnostic script                                                                                                                                                                                                                                                |
+| `references/cron-misconfigured-recurring-timeout.md`        | **5-step diagnostic recipe** for cron-fire proposals when a one-shot timeout is misconfigured as `*/5 * `* * * recurring. Includes path-correction, CSV-direct read (v5), target-key verification, cron-inspection, and [DONE] response format. P-20260502-017 8802-fire counter-example included.                                                                                                |
+| `references/proposal-index-missing-entry.md`                | Conceptual: diagnosing missing proposal-index.md entries when ai-superpower CSV has the proposal. Verify via `mcp_aisp.py get-proposal --proposal-id P-...`, or `grep -n "P-..." /home/hermes/proposals/proposals.csv` directly. Index is derived from CSV, not authoritative.                                                                                                                    |
+| `references/unattended-multi-iteration-state-walk.md`       | 2026-06-04 pattern: how to run N continuous unattended iterations — status state machine walking (`intake → ... → accepted`), `prd_confirmation=timeout-approved` + `tech_expectations=timeout-approved` at `create-proposal` to skip gates immediately, `stage` vs `status` field discipline, all-MCP-via-`mcp_aisp.py` calls (no urllib), 9-iteration Round 7 ai-novel-assistant worked example |
+| `references/ghost-proposal-functional-descendant.md`        | Ghost proposal recovery when API returns 404 but functional descendant exists — state machine stepping for descendant updates                                                                                                                                                                                                                                                                     |
+| `references/ghost-proposal-p-20260502-017.md`               | Session log: P-20260502-017 ghost proposal (May 27 — proposal only in backup JSON, not live JSON)                                                                                                                                                                                                                                                                                                 |
+| `references/ghost-proposal-p-20260502-017-v2.md`            | Session log: P-20260502-017 second cron (June 4 — proposal in live JSON but orphaned from API, API 404)                                                                                                                                                                                                                                                                                           |
+| `references/ghost-proposal-p-20260502-017-v3.md`            | Session log: P-20260502-017 third cron (June 9 — same ghost state, **cron-mode auto-pause applied**: `hermes cron pause 3820fdafad55` to stop 9807-fire spam; first validation of the "Cron-Mode Remediation" path)                                                                                                                                                                               |
+| `references/cron-proposal-sync-failures.md`                 | Cron fires for non-existent proposals — diagnosis & handling                                                                                                                                                                                                                                                                                                                                      |
+| `references/cron-timeout-proposal-index-missing.md`         | Cron timeout fires but proposal already correct in ai-superpower CSV — skip API/index, task is done at data layer                                                                                                                                                                                                                                                                                 |
+| `references/cron-timeout-proposals-json-already-correct.md` | **v4 session log** (now superseded — v5 uses CSV): P-20260502-017 cron fired, all fields already correct in proposals.json — diagnostic sequence and key rule. See `mcp-vs-rest-migration.md` § 5 for v5 verification commands.                                                                                                                                                                   |
+| `references/ai-superpower-architecture.md`                  | Anti-tamper architecture & how ai-superpower works                                                                                                                                                                                                                                                                                                                                                |
+| `references/superpower-clockless-mcp-invocation.md`         | superpower-clockless MCP tool pass-through workaround — `mcp-info` lists tools but CLI has no subcommand passthrough; use Python urllib instead                                                                                                                                                                                                                                                   |
+| `references/ai-superpower-cli-quirks.md`                    | CLI argument rules (e.g. git_repo must be https://)                                                                                                                                                                                                                                                                                                                                               |
+| `references/api-quick-ref.md`                               | HTTP API quick reference (curl commands) — **v4 LEGACY**, prefer `mcp_aisp.py` for new code                                                                                                                                                                                                                                                                                                       |
+| `references/api-python-urllib-quick-ref.md`                 | Python urllib patterns for ai-superpower API — **v4 LEGACY**, prefer `mcp_aisp.py` for new code (cron diagnostic scripts only exception)                                                                                                                                                                                                                                                          |
+| `references/data-recovery.md`                               | Data recovery methods (via audit log)                                                                                                                                                                                                                                                                                                                                                             |
+| `references/local-path-population.md`                       | Local path population logic                                                                                                                                                                                                                                                                                                                                                                       |
+| `references/github-repo-rename.md`                          | GitHub repo rename handling                                                                                                                                                                                                                                                                                                                                                                       |
+| `references/merge-proposals-dirs.md`                        | Merging proposal directories                                                                                                                                                                                                                                                                                                                                                                      |
+| `references/openspec-integration.md`                        | OpenSpec integration                                                                                                                                                                                                                                                                                                                                                                              |
+| `references/vite-cache-issue.md`                            | Vite cache issue handling                                                                                                                                                                                                                                                                                                                                                                         |
+| `references/favorites-system.md`                            | Favorites system architecture                                                                                                                                                                                                                                                                                                                                                                     |
+| `references/bash-pitfalls.md`                               | Common shell script pitfalls                                                                                                                                                                                                                                                                                                                                                                      |
 
 
 ## Scripts
 
 
-| File                                   | Purpose                                                                                                                                                                                                                                                                                                                                                       |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/check-proposal-cron-state.py` | One-shot diagnostic: reads `proposals.json`, verifies target field set, inspects cron jobs for misconfiguration, prints structured JSON verdict. Replaces 5 manual tool calls with one — exit codes 0=DONE / 1=needs action / 2=not found / 3=JSON unreadable. See `references/cron-misconfigured-recurring-timeout.md` for the recipe this script automates. |
-| `backup_proposals.sh`                  | Backup proposal system (API-based CSV export)                                                                                                                                                                                                                                                                                                                 |
-| `backup_api.py`                        | Python helper: paginate ai-superpower API → CSV                                                                                                                                                                                                                                                                                                               |
-| `rollback_proposals.sh`                | Rollback proposal system (full/project/proposal-level)                                                                                                                                                                                                                                                                                                        |
+| File                                   | Purpose                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/check-proposal-cron-state.py` | One-shot diagnostic: reads `proposals.json`, verifies target field set, inspects cron jobs for misconfiguration, prints structured JSON verdict. Replaces 5 manual tool calls with one — exit codes 0=DONE / 1=needs action / 2=not found / 3=JSON unreadable. See `references/cron-misconfigured-recurring-timeout.md` for the recipe this script automates.                                                 |
+| `scripts/generate-spec.py`             | Generate OpenSpec SPEC files. Two modes: (1) `generate-spec.py <project_id>` reads PRD + tech-solution from `workspace-pm/`, outputs real-OpenSpec-compatible `openspec/changes/<change>/` under `workspace-dev/<project>/`. (2) `generate-spec.py --init <name>` bootstraps a SPEC for a legacy project from its README/SPEC.md. Supports `--dry-run` and `--init-all`.                                      |
+| `scripts/generate-tdd-spec.py`         | Generate spec-kit TDD artifacts (TDD layer for pre-OpenSpec states). Three modes: (1) `generate-tdd-spec.py <PRJ>` for Step 6b — outputs `test-cases.md` + `checklist.md` + Step 8 templates under `workspace-test/<project>/proposals/<PRJ>/`. (2) `--full` adds `spec-kit/{spec,plan,tasks}.md` for Steps 5/6/6b. (3) `--report results.json` renders `test-report.md` from test execution JSON for Step 8. |
+| `backup_proposals.sh`                  | Backup proposal system (API-based CSV export)                                                                                                                                                                                                                                                                                                                                                                 |
+| `backup_api.py`                        | Python helper: paginate ai-superpower API → CSV                                                                                                                                                                                                                                                                                                                                                               |
+| `rollback_proposals.sh`                | Rollback proposal system (full/project/proposal-level)                                                                                                                                                                                                                                                                                                                                                        |
 
 
 ## ai-superpower State Machine Quirk

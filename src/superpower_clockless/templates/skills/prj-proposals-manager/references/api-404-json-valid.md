@@ -1,17 +1,56 @@
-# API 404 with proposals.json Still Valid
+# API 404 but proposals.json Valid
 
-## Problem Pattern
+> ⚠️ **v5 MIGRATION NOTE (2026-06-08)**:
+> 
+> This reference documents the v4 era when `proposals.json` (in `YeLuo45/proposals-manager` GitHub repo) was the authoritative store.
+> 
+> **v5.0.0 migration**: proposals.json has been retired. The new authoritative store is **ai-superpower's `~/.ai-superpower/proposals.csv` (CSV + flock + audit log)**, exposed via **MCP tools** at `/mcp` Streamable HTTP endpoint. SPA uses `useMcp.js`, agents use `aisp mcp --transport=stdio`.
+> 
+> The diagnostic pattern ("API 404 but data valid" → conclude DONE) **still applies** in v5, but verification commands changed:
+> - v4: `grep -n "P-..." /home/hermes/proposals/proposals.json` + `GET /api/proposals/{id}`
+> - v5: `grep -n "P-..." /home/hermes/proposals/proposals.csv` + `mcp_aisp.py get-proposal --proposal-id P-...`
+> 
+> See `references/mcp-connection-troubleshooting.md` for v5 patterns.
+> 
+> ---
 
-A cron job fires to update a proposal's fields via ai-superpower API. The API returns 404, but `proposals.json` already contains the correct values for that proposal ID.
+**Symptoms**: `GET /api/proposals/P-YYYYMMDD-XXX` returns HTTP 404, but `proposals.json` contains an entry for that ID with correct field values.
 
-## Example from Session
+**Root Cause**: Proposal is "orphaned" in the JSON mirror but absent from the live API database. Can occur after server restart, failed sync, or migration to new API format.
 
-```
-API error: HTTP Error 404: Not Found
-Status API error: HTTP Error 500: Internal Server Error
-```
+**Diagnosis**:
+1. Read `proposals.json` around the ID: `grep -n "P-YYYYMMDD-XXX" /home/hermes/proposals/proposals.json`
+2. Inspect 10–20 lines around the match — check `status`, `tech_expectations`, `tech_stack`, `notes`, `stage`
+3. If all required fields are present and correct → data layer is complete
 
-Yet `proposals.json` (lines 1823-1834) for `P-20260502-017` already shows:
+**Decision Tree**:
+
+| proposals.json state | API state | Action |
+|---------------------|-----------|--------|
+| Has entry + correct values | 404 | Task already done — skip API, skip index edit |
+| Has entry + incomplete/incorrect | 404 | Orphaned — do NOT POST replacement; use functional descendant or rollback |
+| No entry | 404 | Proposal genuinely missing — create via API if appropriate |
+
+**Do NOT**:
+- POST a new proposal to replace the 404 entry — orphans the original ID and doubles count
+- Manually add entry to `proposal-index.md` — it is derived, will sync later
+- Run `sync-proposals-to-website.py` if missing — may not exist
+
+**Do**:
+- Verify JSON has all correct values → conclude data-layer task complete
+- Report `[DONE]` — the data is already correct at source
+- For cron timeout jobs: if all target fields already set in JSON, the timeout handler's work is already done
+
+---
+
+## Session Example (2026-05-27)
+
+Cron job `P-20260502-017-tech-confirm` timeout handler was asked to:
+- Set `tech_expectations: timeout-approved`
+- Set `current_status: in_dev`
+- Add `tech_stack: ai SDK + @ai-sdk/openai + @ai-sdk/anthropic + @ai-sdk/google + partial-json + jsonrepair`
+
+`proposals.json` lines 1822–1839:
 ```json
 {
   "id": "P-20260502-017",
@@ -19,45 +58,15 @@ Yet `proposals.json` (lines 1823-1834) for `P-20260502-017` already shows:
   "status": "in_dev",
   "priority": "PRJ-20260412-008",
   "created": "ai-subscription",
-  "updated": "2026-05-24",
+  "updated": "2026-05-27",
   "assignee": "",
   "tech_expectations": "timeout-approved",
   "tech_expectations_timeout_resolution": "倒计时到期(2026-05-02)，默认通过处理",
   "current_status": "in_dev",
-  "tech_stack": "ai SDK + @ai-sdk/openai + @ai-sdk/anthropic + @ai-sdk/google + partial-json + jsonrepair"
+  "tech_stack": "ai SDK + @ai-sdk/openai + @ai-sdk/anthropic + @ai-sdk/google + partial-json + jsonrepair",
+  "stage": "in_dev",
+  "notes": "Technical Expectations Timeout Resolution: 倒计时到期(2026-05-02)，默认通过处理\nTechnical Stack: ai SDK + @ai-sdk/openai + @ai-sdk/anthropic + @ai-sdk/google + partial-json + jsonrepair"
 }
 ```
 
-## Root Cause
-
-The API and `proposals.json` can diverge. Proposals exist in the JSON store but are not accessible via the REST API — this is distinct from "ghost proposals" (which have empty titles) and from "API 404 with no JSON entry" (which is a genuine missing state).
-
-## Decision Tree
-
-1. **Does proposals.json have an entry for this ID?**
-   - No → Proposal is truly missing; this is not the case described here
-   - Yes → Continue
-
-2. **Does the JSON entry have all required fields populated?**
-   - Yes (title, status, tech_expectations, current_status, tech_stack) → Data layer is complete
-   - No (title="" or partial fields) → This is a **ghost proposal**; follow `ghost-proposal-functional-descendant.md`
-
-3. **Is the data correct as-is?**
-   - Yes → Task is done. proposals.json is the data source; index and API are derived.
-   - No → Edit proposals.json directly to fix the values, then conclude task is done.
-
-## What NOT to Do
-
-- Do NOT POST a new proposal to replace the one that returned 404 — this orphans the original ID
-- Do NOT manually edit proposal-index.md — it is derived and will regenerate on sync
-- Do NOT attempt API calls again — the divergence is already confirmed
-
-## Practical Rule
-
-> When API returns 404 but proposals.json has the proposal with correct fields, treat the task as complete at the data layer. The index is derived; it will catch up on the next sync.
-
-## Files Involved
-
-- `/home/hermes/proposals/proposals.json` — data source (authoritative)
-- `/home/hermes/proposals/proposal-index.md` — derived index
-- `/home/hermes/.hermes/proposals/proposals.json` — mirror copy (auto-synced with above)
+All target fields already present and correct. API `GET` returned 404. **Conclusion**: task already done at data layer, no action needed.

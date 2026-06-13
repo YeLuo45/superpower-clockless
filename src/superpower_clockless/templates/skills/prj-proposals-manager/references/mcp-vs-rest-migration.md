@@ -13,7 +13,7 @@ This reference is the v4→v5 migration cheat sheet for code, prompts, and opera
 |---|---|
 | `YeLuo45/proposals-manager` GitHub repo → `data/proposals.json` | **ai-superpower `~/.ai-superpower/proposals.csv`** (CSV + flock + audit) |
 | SPA reads/writes `useGitHub.js` (api.github.com + PAT) | SPA reads/writes **useMcp.js** (MCP at `/mcp/`) |
-| Agent reads/writes via `urllib`/`curl` to `ai-superpower/api/*` REST | Agent reads/writes via **`aisp mcp --transport=stdio`** |
+| Agent reads/writes via `urllib`/`curl` to `ai-superpower/api/*` REST | Agent reads/writes via **`mcp_aisp.py <tool>`** (unified CLI that wraps `aisp mcp --transport=stdio`) |
 
 **v5 truth**: ai-superpower is the only source of truth. proposals.json has been **retired** (not deleted from git history, but no longer authoritative).
 
@@ -84,11 +84,11 @@ This reference is the v4→v5 migration cheat sheet for code, prompts, and opera
 | What you want to verify | v4 command | v5 command |
 |---|---|---|
 | Proposal exists in data layer | `grep -n "P-..." /home/hermes/proposals/proposals.json` | `grep -n "P-..." /home/hermes/proposals/proposals.csv` |
-| API can read proposal | `curl /api/proposals/{id}` | `aisp proposal get P-...` (or MCP `get_proposal`) |
-| Project exists | `curl /api/projects/{id}` | `aisp project get PRJ-...` (or MCP `get_project`) |
-| Update a proposal field | `curl -X PUT /api/proposals/{id}/fields -d "..."` | `aisp proposal update P-... --fields <key>=<value>` (or MCP `update_proposal_fields`) |
-| Move to next state | `curl -X PUT /api/proposals/{id}/status -d "status=..."` | `aisp proposal status P-... <new_status>` (or MCP `update_proposal_status`) |
-| Check audit log | `curl /api/proposals/audit?page=1` | `aisp audit list --page 1` (or MCP `get_audit`) |
+| API can read proposal | `curl /api/proposals/{id}` | `mcp_aisp.py get-proposal --proposal-id P-...` |
+| Project exists | `curl /api/projects/{id}` | `mcp_aisp.py get-project --project-id PRJ-...` |
+| Update a proposal field | `curl -X PUT /api/proposals/{id}/fields -d "..."` | `mcp_aisp.py update-proposal-fields --proposal-id P-... --field1 val1 --field2 val2` |
+| Move to next state | `curl -X PUT /api/proposals/{id}/status -d "status=..."` | `mcp_aisp.py update-proposal-status --proposal-id P-... --status <status>` |
+| List MCP tools (smoke test) | n/a (REST has no tool list) | `mcp_aisp.py --list` (calls `aisp mcp --transport=stdio` then `tools/list` under the hood) |
 | Trigger sync | `curl -X POST /api/sync/trigger` | `aisp sync now` (or MCP `export_sync`) |
 | Server health | `curl /api/health` | `curl /health` (v5 still has this) |
 | List MCP tools (smoke test) | n/a (REST has no tool list) | `aisp mcp --transport=stdio` then `tools/list` |
@@ -128,7 +128,7 @@ intake → clarifying → prd_pending_confirmation → approved_for_dev
 - `test_failed` is a terminal state from `in_test_acceptance` (must restart from `in_dev`)
 - Strict linear: each transition is its own MCP call, no skips
 
-**Migration action**: update any code that used `in_tdd_test` or `needs_revision`. Re-validate that all current proposals have valid v5 states (`aisp proposal list --stage=needs_revision` should return empty).
+**Migration action**: update any code that used `in_tdd_test` or `needs_revision`. Re-validate that all current proposals have valid v5 states (`mcp_aisp.py list-proposals --page-size 200` should return proposals with valid stages only). Use `mcp_aisp.py update-proposal-fields` to fix any orphaned v4 stages.
 
 ---
 

@@ -1,5 +1,9 @@
 # API vs proposals.json Divergence
 
+> ⚠️ **v5 MIGRATION NOTE (2026-06-08, updated 2026-06-13)**: This file documents the v4 era. In v5.0.0, `proposals.json` is retired. The equivalent "data-vs-API divergence" check is **CSV-vs-MCP**: `grep -n "P-..." /home/hermes/proposals/proposals.csv` (CSV) + `mcp_aisp.py get-proposal --proposal-id P-...` (MCP). See `references/mcp-vs-rest-migration.md` for full mapping. The diagnostic pattern (data valid, API says 404 → conclude DONE) still applies. **All MCP operations should use `mcp_aisp.py` (the unified CLI) — direct `urllib`/`curl` is reserved for cron diagnostic scripts only.**
+> 
+> ---
+
 ## Symptoms
 
 - `proposals.json` contains a proposal entry (e.g. `P-20260502-017`) but the API returns `{"detail":"Proposal not found"}`
@@ -28,10 +32,70 @@
 ## Key Learnings from P-20260502-017 investigation
 
 - The API base URL is **8001**, not 8000 (8000 appears in some legacy docs)
-- Use `execute_code` with Python `urllib` instead of shell pipe-to-python patterns that trigger security blocks
 - Proposals that exist only in `proposals.json` but not in the API cannot be updated via the API — they effectively don't exist in the system of record
-- `sync-proposals-to-website.py` reconciles `proposal-index.md` but does NOT push to the API — it only syncs markdown index to the website data
-- The sync script itself had a bug (`load_mapping` not defined) which prevented reconciliation
+
+### proposals.json Structure (Critical)
+
+**WRONG assumption**: `proposals.json` is a flat `{proposals: [...]}` array.
+**ACTUAL structure**: project-centric nested `{projects: [...], lastUpdate: "..."}`.
+
+```json
+{
+  "projects": [
+    {
+      "id": "PRJ-20260412-008",
+      "name": "ai-subscription",
+      "proposals": [
+        {
+          "id": "P-20260502-017",
+          "title": "ai-subscription-大模型调用层升级-llm-design-dev",
+          "status": "in_dev"
+        }
+      ]
+    }
+  ],
+  "lastUpdate": "2025-05-24"
+}
+```
+
+To find a proposal by ID, you MUST:
+1. Iterate over `projects[]`
+2. Within each project, iterate over its inner `proposals[]`
+3. Match on `proposal.id === target`
+
+This means `grep "P-20260502-017" proposals.json` finds the match at the nested level — the outer container is `projects`, not `proposals`.
+
+### proposals.json Structure (Critical)
+
+**WRONG assumption**: `proposals.json` is a flat `{proposals: [...]}` array.
+**ACTUAL structure**: project-centric nested `{projects: [...], lastUpdate: "..."}`.
+
+```json
+{
+  "projects": [
+    {
+      "id": "PRJ-20260412-008",
+      "name": "ai-subscription",
+      "proposals": [
+        {
+          "id": "P-20260502-017",
+          "title": "ai-subscription-大模型调用层升级-llm-design-dev",
+          "status": "in_dev",
+          ...
+        }
+      ]
+    }
+  ],
+  "lastUpdate": "2025-05-24"
+}
+```
+
+To find a proposal by ID, you MUST:
+1. Iterate over `projects[]`
+2. Within each project, iterate over its inner `proposals[]`
+3. Match on `proposal.id === target`
+
+This means `grep "P-20260502-017" proposals.json` finds the match at the nested level — the outer container is `projects`, not `proposals`.
 
 ## Ghost Proposal Signature & Functional Descendants
 

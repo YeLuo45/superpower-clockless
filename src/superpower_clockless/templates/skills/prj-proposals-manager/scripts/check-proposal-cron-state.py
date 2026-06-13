@@ -15,12 +15,14 @@ Exit codes:
     2 = proposal not found in ai-superpower
     3 = ai-superpower CSV missing or unreachable
 
-v5 update (2026-06-08): This script's logic still works (data is source of truth,
+v5 update (2026-06-08, revised 2026-06-13): This script's logic still works (data is source of truth,
 skip writes when correct), but it currently reads `proposals.json` (v4 mirror).
-v5 verification should use `aisp proposal get P-...` (or MCP `get_proposal`) or
+v5 verification should use `mcp_aisp.py get-proposal --proposal-id P-...` (MCP, via unified CLI) or
 grep ai-superpower's `~/.ai-superpower/proposals.csv` directly. Future versions
 of this script will use MCP. For now, the recipe in
 `references/cron-misconfigured-recurring-timeout.md` has the v5 verification path.
+The script's continued use of urllib for cron diagnostics is the documented
+exception to the "MCP-only" rule (see SKILL.md § "Emergency: REST API").
 """
 from __future__ import annotations
 import argparse

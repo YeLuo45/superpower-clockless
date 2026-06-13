@@ -52,7 +52,7 @@ api_key = open("/home/hermes/.ai-superpower/config.toml").read().split('key = "'
 
 # List proposals for the same project
 req = urllib.request.Request(
-    "http://127.0.0.1:8001/api/proposals?project_id=PRJ-YYYYMMDD-XXX&page=1&page_size=50",
+    "http://127.0.0.1:8000/api/proposals?project_id=PRJ-YYYYMMDD-XXX&page=1&page_size=50",
     headers={'X-API-Key': api_key}
 )
 with urllib.request.urlopen(req) as resp:
@@ -96,7 +96,7 @@ transitions = [
 for target_status in transitions:
     payload = json.dumps({"status": target_status}).encode()
     req = urllib.request.Request(
-        f"http://127.0.0.1:8001/api/proposals/{proposal_id}/status",
+        f"http://127.0.0.1:8000/api/proposals/{proposal_id}/status",
         data=payload, method='PUT',
         headers={'X-API-Key': api_key, 'Content-Type': 'application/json'}
     )
@@ -113,7 +113,7 @@ for target_status in transitions:
 
 ```python
 req = urllib.request.Request(
-    f"http://127.0.0.1:8001/api/proposals/{proposal_id}",
+    f"http://127.0.0.1:8000/api/proposals/{proposal_id}",
     headers={'X-API-Key': api_key}
 )
 with urllib.request.urlopen(req) as resp:

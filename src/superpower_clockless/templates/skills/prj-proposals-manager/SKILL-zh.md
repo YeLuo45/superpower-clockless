@@ -119,7 +119,7 @@ intake → clarifying → prd_pending_confirmation → approved_for_dev
 **触发时机：**
 
 - 交付时：始终提供 A/B/C/D 迭代选项，自动选择第一个
-- PRD/技术预期确认：5分钟超时后自动批准并继续
+- PRD/技术预期确认：自动批准并继续
 - 无人值守模式下不提问澄清问题
 
 ---
@@ -154,6 +154,7 @@ Step 11: 部署（验收后交付）
 如果项目名比较常见，务必使用下面的扫描流程。
 
 **先用 ai-superpower 检查重名（精准匹配，区分大小写）：**
+
 ```bash
 # 1. 按名称搜索
 mcp_aisp.py list-projects --search "ProjectName" --page-size 5
@@ -169,13 +170,16 @@ mcp_aisp.py scan-duplicate-projects --case-insensitive false   # 仅完全匹配
 
 **3 种场景处理：**
 
-| `scan-duplicate-projects` 结果 | 行动 |
-|---|---|
-| 没有重复 | 安全创建新项目 |
-| 找到重复（case-insensitive） | 提交给 boss：列出每个重复的 PRJ-ID，问哪个是规范的 |
-| 找到重复（完全匹配） | 复用现有 ID —— `create-project` 会自动返回 `_existing: true` |
+
+| `scan-duplicate-projects` 结果 | 行动                                                  |
+| ---------------------------- | --------------------------------------------------- |
+| 没有重复                         | 安全创建新项目                                             |
+| 找到重复（case-insensitive）       | 提交给 boss：列出每个重复的 PRJ-ID，问哪个是规范的                     |
+| 找到重复（完全匹配）                   | 复用现有 ID —— `create-project` 会自动返回 `_existing: true` |
+
 
 **如果 boss 说"把 X 合并到 Y"：**
+
 ```bash
 # 步骤 A：建议先备份（审计日志已存，但可另外导出）
 mcp_aisp.py get-audit --entity project --since 2026-06-01   # 查看最近活动
@@ -189,6 +193,7 @@ mcp_aisp.py scan-duplicate-projects                # 重复组数应 -1
 ```
 
 **通过 `mcp_aisp.py`（MCP CLI）创建项目：**
+
 ```bash
 # 第一次尝试（无精准匹配）：
 mcp_aisp.py create-project --name "ProjectName" --git-repo "https://github.com/owner/repo"
@@ -199,15 +204,16 @@ mcp_aisp.py create-project --name "ProjectName" --git-repo "..." --force
 # 精准匹配命中的响应（自动返回现有，无错误）：
 # {"_existing": true, "id": "PRJ-YYYYMMDD-XXX", "_note": "Returned existing..."}
 ```
-2. 通过 ai-superpower CLI 为项目生成下一个提案 ID（自动分配，无需手动管理）
-3. 为此提案创建 gh-pages 分支（如果项目有远程仓库）：
+
+1. 通过 ai-superpower CLI 为项目生成下一个提案 ID（自动分配，无需手动管理）
+2. 为此提案创建 gh-pages 分支（如果项目有远程仓库）：
   ```bash
   cd $superpower-proposals/<project-name>
   git checkout -b gh-pages
   ```
-4. 将 `$TEMPLATES_DIR/request-intake-template.md` 复制到提案目录
-5. 填写基本信息和原始需求
-6. 通过 ai-superpower API 创建提案：
+3. 将 `$TEMPLATES_DIR/request-intake-template.md` 复制到提案目录
+4. 填写基本信息和原始需求
+5. 通过 ai-superpower API 创建提案：
   ```bash
    mcp_aisp.py create-proposal --title "ProposalTitle" --owner "coordinator" --project-id "PRJ-YYYYMMDD-XXX" --stage approved_for_dev
   ```
@@ -377,39 +383,9 @@ mcp_aisp.py update-proposal-status --proposal-id P-YYYYMMDD-XXX --status accepte
 6. 更新提案：将状态设为 `deployed`，记录 Deployment URL：
   ```bash
    mcp_aisp.py update-proposal-fields --proposal-id P-YYYYMMDD-XXX --deployment-url "https://..."
-mcp_aisp.py update-proposal-status --proposal-id P-YYYYMMDD-XXX --status deployed
   ```
 
----
-
-## API 操作速查
-
-所有操作使用 HTTP REST API，Base URL = `http://0.0.0.0:8000`，Header: `X-API-Key: {key}`
-
-> **完整接口文档**：见 `../../ai-superpower/docs/api/`：
->
-> - `projects.md` — 项目 CRUD 接口
-> - `proposals.md` — 提案 CRUD + 状态机流转
-> - `utilities.md` — 审计、验证、健康检查、CLI 参考
-
-### 项目操作（Python MCP stdio）
-
-```python
-# stdio 客户端通过 mcp Python SDK 连接
-import asyncio
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-
-async def list_projects():
-    params = StdioServerParameters(command="aisp", args=["mcp", "--transport=stdio"])
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            result = await session.call_tool("list_projects", {"search": "keyword"})
-            print(result.content[0].text)
-
-asyncio.run(list_projects())
-```
+mcp_aisp.py update-proposal-status --proposal-id P-YYYYMMDD-XXX --status deployed
 
 ### 提案操作（Python MCP stdio）
 
@@ -597,7 +573,7 @@ python3 scripts/sync-pm-to-dev.py PRJ-20260516-001 --dry-run  # 仅预览
 
 ### 验收后：生成 OpenSpec SPEC
 
-提案验收后，基于 PRD 和技术方案生成 OpenSpec 规范文件：
+提案验收后（状态 `accepted` 或 `delivered`），基于 PRD 和技术方案生成 OpenSpec 规范文件：
 
 ```bash
 python3 scripts/generate-spec.py <project_id> [--dry-run]
@@ -607,18 +583,24 @@ python3 scripts/generate-spec.py PRJ-20260422-001          # 为 ai-novel-assist
 python3 scripts/generate-spec.py PRJ-20260516-001 --dry-run  # 仅预览
 ```
 
-读取 `workspace-pm/proposals/{project_id}/` 下的 PRD 和技术方案，生成：
+输入：`workspace-pm/proposals/{project_id}/` 下的 PRD + tech-solution
+输出结构（匹配 [https://github.com/YeLuo45/OpenSpec](https://github.com/YeLuo45/OpenSpec) 真实仓库）：
 
 ```
-workspace-dev/proposals/{project_name}/SPEC/
-├── proposal.md        # Why/What/Capabilities/Impact（来自 PRD）
-├── spec.md           # 需求 + GHERKIN 场景
-├── design.md         # Context/Goals/Decisions/Risks（来自技术方案）
-├── tasks.md          # 实施检查清单
-└── .openspec.yaml    # 元数据（schema、project、创建日期）
+workspace-dev/proposals/{project_name}/openspec/changes/{YYYY-MM-DD}-{slug}/
+├── .openspec.yaml             # schema: spec-driven, created: YYYY-MM-DD, proposal: PRJ-...
+├── proposal.md                # Why / What Changes / Capabilities / Impact
+├── design.md                  # Context / Goals+Non-Goals / Decisions / Risks
+├── tasks.md                   # ## N. <Group> / - [ ] N.M <task>
+└── specs/
+    └── <capability-name>/
+        └── spec.md            # ## ADDED Requirements / ### Requirement: <name>
+                               #   #### Scenario: <name> / - **WHEN** / - **THEN**
 ```
 
-OpenSpec 参考：[https://github.com/YeLuo45/OpenSpec（schemas/spec-driven/templates/）](https://github.com/YeLuo45/OpenSpec（schemas/spec-driven/templates/）)
+OpenSpec 项目自身输出在 `workspace-dev/proposals/openspec/openspec/changes/{change}/`（少一层）。
+
+**Schema 完整参考**：见 `references/openspec-integration.md`（含 `.openspec.yaml` 格式、capability 命名规则、`#### Scenario` 必须 4 个 # 等关键坑点）。
 
 ### 为已有项目初始化 SPEC
 

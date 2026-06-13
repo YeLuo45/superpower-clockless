@@ -75,5 +75,5 @@ grep "new-name" proposals.csv
 1. Rename repo via GitHub API: `gh api repos/{owner}/{old} --method PATCH -f name='{new}'`
 2. Update `projects.csv` (3 field changes)
 3. Update `proposals.csv` (git_repo + notes URLs)
-4. Run `proposal_manager_cli.py proposal audit` to verify integrity
-5. Run `proposal_manager_cli.py proposal sync-to-index` to regenerate index
+4. Verify integrity with `mcp_aisp.py get-audit --entity project --since 2026-06-01` (look for the rename op)
+5. Force index regeneration with `mcp_aisp.py get-sync-status` (or run `sync-proposals-to-website.py`)

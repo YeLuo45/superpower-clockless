@@ -1,4 +1,15 @@
-# proposals.json Structure & Ghost Proposal Diagnosis
+# proposals.json Structure & Ghost Proposal Diagnosis (v4 era)
+
+> ⚠️ **v5 MIGRATION NOTE (2026-06-08)**: This file documents v4 `proposals.json` structure (project-centric JSON mirror in `YeLuo45/proposals-manager` GitHub repo). In v5.0.0, **proposals.json is retired** and the data lives in **ai-superpower's `~/.ai-superpower/proposals.csv`** (one row per proposal, flat CSV with audit log + flock). The "ghost proposal" pattern still exists but with a different verification path.
+> 
+> v5 equivalent diagnostic for ghost proposals:
+> 1. Verify in CSV: `grep -n "P-..." /home/hermes/proposals/proposals.csv`
+> 2. Verify via MCP: `mcp_aisp.py get-proposal --proposal-id P-...`
+> 3. If CSV has it but MCP says 404 → proposal is "orphaned" in MCP database but valid in CSV → conclude `[DONE]` without re-creating (would orphan original ID)
+> 
+> See `references/mcp-connection-troubleshooting.md` for the full v5 ghost-proposal flow.
+> 
+> ---
 
 ## File Structure
 
