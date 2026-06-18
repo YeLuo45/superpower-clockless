@@ -261,11 +261,11 @@ Write-Host ""
 Write-Host "Your API key: $ApiKey" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "1. Copy your API key to ai-superpower config:" -ForegroundColor White
-Write-Host "   Edit $AI_DIR\config.toml and set api_key = `"$ApiKey`"" -ForegroundColor Yellow
+Write-Host "   notepad $AI_DIR\config.toml" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "2. Start ai-superpower server:" -ForegroundColor White
 Write-Host "   cd $AI_DIR" -ForegroundColor Yellow
-Write-Host "   .\.venv\Scripts\activate.bat" -ForegroundColor Yellow
+Write-Host "   .\venv\Scripts\activate.bat" -ForegroundColor Yellow
 Write-Host "   python -m ai_superpower.server --config config.toml" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "3. In a new terminal, activate superpower-clockless:" -ForegroundColor White
